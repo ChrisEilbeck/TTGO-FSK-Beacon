@@ -7,15 +7,13 @@
 #include <RadioLib.h>
 
 // SX1278 has the following connections:
-// NSS pin:   10
-// DIO0 pin:  2
-// RESET pin: 9
-// DIO1 pin:  3
 
 #define LoRa_NSS	18
 #define LoRa_DIO0	26
 #define LoRa_RESET	-1
 #define LoRa_DIO1	-1
+
+#define EEPROM_SIZE 		8
 
 #define MIN_FREQUENCY		430.000
 #define DEFAULT_FREQUENCY	433.920
@@ -39,17 +37,25 @@ void update_frequency(float freq)
 	
 	// store the frequency to eeprom
 	
+	uint8_t buffer[4];
+	memcpy(buffer,(uint8_t *)&freq,4);
+	
+    EEPROM.write(0,buffer[0]);
+    EEPROM.write(1,buffer[1]);
+    EEPROM.write(2,buffer[2]);
+    EEPROM.write(3,buffer[3]);
+	
+	
+	
+	
+	
+	
+    EEPROM.commit();
 }
 
 void setup(void)
 {
 	Serial.begin(115200);
-	
-	
-	
-	
-	
-	
 	
 	// initialize SX1278 FSK modem with default settings
 	Serial.print(F("[SX1278] Initializing ... "));
@@ -65,7 +71,38 @@ void setup(void)
 		Serial.println(state);
 		while (true);
 	}
-
+	
+	EEPROM.begin(EEPROM_SIZE);
+	
+	uint8_t buffer[4];
+	float freqval;
+	
+	buffer[0]=EEPROM.read(0);
+	buffer[1]=EEPROM.read(1);
+	buffer[2]=EEPROM.read(2);
+	buffer[3]=EEPROM.read(3);
+	
+	memcpy((uint8_t *)&freqval,buffer,4);
+	
+	if(		(freqval<MIN_FREQUENCY)
+		||	(freqval>MAX_FREQUENCY)		)
+	{
+		Serial.println("Stored frequency is invalid, subsituting the default");
+		Serial.println(buffer[0],HEX);
+		Serial.println(buffer[1],HEX);
+		Serial.println(buffer[2],HEX);
+		Serial.println(buffer[3],HEX);
+		frequency=DEFAULT_FREQUENCY;
+		update_frequency(frequency);
+	}
+	else
+	{
+		frequency=freqval;
+		Serial.print("Frequency: ");
+		Serial.printf("%03.3f MHz",frequency);
+		Serial.println();
+	}
+	
 	// if needed, you can switch between LoRa and FSK modes
 	//
 	// radio.begin()       start LoRa mode (and disable FSK)
@@ -151,6 +188,10 @@ void loop(void)
 							break;
 				
 				// frequency adjustment commands
+				
+				case '0':	frequency=DEFAULT_FREQUENCY;
+							update_frequency(frequency);
+							break;
 				
 				case '+':	if(frequency<MAX_FREQUENCY)	frequency+=FINE_STEP;
 							if(frequency>MAX_FREQUENCY)	frequency=MAX_FREQUENCY;
