@@ -55,25 +55,30 @@ void setup(void)
 	// the following settings can also
 	// be modified at run-time
 	state = radio.setFrequency(433.920);
-	if(state!=RADIOLIB_ERR_NONE)	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
-	state = radio.setBitRate(1200.0);
-	if(state!=RADIOLIB_ERR_NONE)	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	state = radio.setBitRate(1.2);
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state = radio.setFrequencyDeviation(10.0);
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	
 	state = radio.setRxBandwidth(250.0);
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	
 	state = radio.setOutputPower(3.0);
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	
 	state = radio.setCurrentLimit(100);
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	
 	state = radio.setDataShaping(RADIOLIB_SHAPING_0_5);
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	
 	uint8_t syncWord[]={	0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa	};
 	
 	state = radio.setSyncWord(syncWord, 8);
-	if(state != RADIOLIB_ERR_NONE)
-	{
-		Serial.print(F("Unable to set configuration, code "));
-		Serial.println(state);
-		while (true);
-	}
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 #endif
 	
 	pinMode(GREEN_LED,OUTPUT);
@@ -85,6 +90,8 @@ void loop(void)
 //	uint8_t TxPacket[]={0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa};
 	uint8_t TxPacket[]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 	uint16_t TxPacketLength=8;
+	int state;
+	static int highlow=0;
 	
 	if(Serial.available())
 	{
@@ -98,6 +105,18 @@ void loop(void)
 		
 		switch(byte)
 		{
+			case 'l':
+			case 'L':	state = radio.setBitRate(1.2);
+						if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+						highlow=0;
+						break;
+						
+			case 'h':
+			case 'H':	state = radio.setBitRate(2.4);
+						if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+						highlow=1;
+						break;
+						
 			case 't':
 			case 'T':	
 #if 0
@@ -160,7 +179,7 @@ void loop(void)
 												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
 												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa		};
 												
-							int state=radio.transmit(byteArr,sizeof(byteArr));
+							int state=radio.transmit(byteArr,32*(highlow+1));
 							
 							if(state==RADIOLIB_ERR_NONE)
 							{
