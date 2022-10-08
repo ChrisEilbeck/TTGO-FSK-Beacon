@@ -3,6 +3,7 @@
 
 #define GREEN_LED	25
 
+#include <EEPROM.h>
 #include <RadioLib.h>
 
 // SX1278 has the following connections:
@@ -16,22 +17,40 @@
 #define LoRa_RESET	-1
 #define LoRa_DIO1	-1
 
+#define MIN_FREQUENCY		430.000
+#define DEFAULT_FREQUENCY	433.920
+#define MAX_FREQUENCY		440.000
+
+#define FINE_STEP			0.001
+#define COARSE_STEP			0.005
+#define VERY_COARSE_STEP	0.100
+
 SX1278 radio=new Module(LoRa_NSS,LoRa_DIO0,LoRa_RESET,LoRa_DIO1);
+float frequency=DEFAULT_FREQUENCY;
+
+void update_frequency(float freq)
+{
+	int state=radio.setFrequency(freq);
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	
+	Serial.print("Frequency: ");
+	Serial.printf("%03.3f MHz",freq);
+	Serial.println();
+	
+	// store the frequency to eeprom
+	
+}
 
 void setup(void)
 {
 	Serial.begin(115200);
 	
-	while(!Serial);
 	
-#if 0
-	LoRaPlusFSK.setFSKMode();
-	LoRaPlusFSK.setTxPower(5);
-
-	LoRaPlusFSK.setPins(18,23,26);
-	LoRaPlusFSK.begin(433920000);
-#endif
-#if 1
+	
+	
+	
+	
+	
 	// initialize SX1278 FSK modem with default settings
 	Serial.print(F("[SX1278] Initializing ... "));
 	
@@ -54,7 +73,7 @@ void setup(void)
 
 	// the following settings can also
 	// be modified at run-time
-	state = radio.setFrequency(433.920);
+	state = radio.setFrequency(frequency);
 	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state = radio.setBitRate(1.2);
@@ -79,7 +98,6 @@ void setup(void)
 	
 	state = radio.setSyncWord(syncWord, 8);
 	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
-#endif
 	
 	pinMode(GREEN_LED,OUTPUT);
 	digitalWrite(GREEN_LED,LOW);
@@ -87,149 +105,96 @@ void setup(void)
 
 void loop(void)
 {
-//	uint8_t TxPacket[]={0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa};
-	uint8_t TxPacket[]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
-	uint16_t TxPacketLength=8;
-	int state;
-	static int highlow=0;
-	
-	if(Serial.available())
+	if(Serial)
 	{
-		char byte=Serial.read();
+		uint8_t TxPacket[255];
+		uint16_t TxPacketLength=8;
+		int state;
+		static int highlow=0;
 		
-		Serial.write(byte);
+		memset(TxPacket,0xaa,255);
 		
-		digitalWrite(GREEN_LED,HIGH);
-		delay(50);
-		digitalWrite(GREEN_LED,LOW);
-		
-		switch(byte)
+		if(Serial.available())
 		{
-			case 'l':
-			case 'L':	state = radio.setBitRate(1.2);
-						if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
-						highlow=0;
-						break;
-						
-			case 'h':
-			case 'H':	state = radio.setBitRate(2.4);
-						if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
-						highlow=1;
-						break;
-						
-			case 't':
-			case 'T':	
-#if 0
-						LoRaPlusFSK.writeRegister(REG_PACKET_CONFIG1,0b10010000);
-						LoRaPlusFSK.writeRegister(REG_PACKET_CONFIG2,0b01000000);
-						
-						LoRaPlusFSK.writeRegister(REG_FSK_PREAMBLE_MSB,0);
-						LoRaPlusFSK.writeRegister(REG_FSK_PREAMBLE_LSB,8);
-						
-//						LoRaPlusFSK.writeRegister(REG_FSK_PAYLOAD_LENGTH,8);
-//						LoRaPlusFSK.writeRegister(REG_PAYLOAD_LENGTH,8);
-							
-//						LoRaPlusFSK.setPayloadLength(TxPacketLength);
-						LoRaPlusFSK.setFSKBitRate(1200);
-						
-						LoRaPlusFSK.beginPacket(false);
-						
-#if 0
-						LoRaPlusFSK.writeRegister(REG_FIFO,0x08);	// length
-						
-						LoRaPlusFSK.writeRegister(REG_FIFO,0xaa);
-						LoRaPlusFSK.writeRegister(REG_FIFO,0xaa);
-						LoRaPlusFSK.writeRegister(REG_FIFO,0xaa);
-						LoRaPlusFSK.writeRegister(REG_FIFO,0xaa);
-						LoRaPlusFSK.writeRegister(REG_FIFO,0xaa);
-						LoRaPlusFSK.writeRegister(REG_FIFO,0xaa);
-						LoRaPlusFSK.writeRegister(REG_FIFO,0xaa);
-						LoRaPlusFSK.writeRegister(REG_FIFO,0xaa);
-#else
-						LoRaPlusFSK.write(TxPacket,TxPacketLength);
-#endif
-						
-						LoRaPlusFSK.endPacket(false);
-#endif
-						{
-//							int state = radio.transmit("Hello World!");
-							
-							uint8_t byteArr[]={	0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,
-												0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa		};
-												
-							int state=radio.transmit(byteArr,32*(highlow+1));
-							
-							if(state==RADIOLIB_ERR_NONE)
-							{
-								Serial.println(F("[SX1278] Packet transmitted successfully!"));
-							}
-							else if(state==RADIOLIB_ERR_PACKET_TOO_LONG)
-							{
-								Serial.println(F("[SX1278] Packet too long!"));
-							}
-							else if(state==RADIOLIB_ERR_TX_TIMEOUT)
-							{
-								Serial.println(F("[SX1278] Timed out while transmitting!"));
-							}
-							else
-							{
-								Serial.println(F("[SX1278] Failed to transmit packet, code "));
-								Serial.println(state);
-							}
-						}
-						
-						break;
+			char byte=Serial.read();
 			
-			case 'd':
-			case 'D':
-#if 0
-						LoRaPlusFSK.dumpRegisters(Serial);
-#endif
-						
-						
-						break;
+			Serial.write(byte);
 			
-			default:	// do nowt
-						break;
+			digitalWrite(GREEN_LED,HIGH);
+			delay(50);
+			digitalWrite(GREEN_LED,LOW);
+			
+			switch(byte)
+			{
+				case 'l':
+				case 'L':	state = radio.setBitRate(1.2);
+							if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+							highlow=0;
+							break;
+							
+				case 'h':
+				case 'H':	state = radio.setBitRate(2.4);
+							if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+							highlow=1;
+							break;
+							
+				case 't':
+				case 'T':	
+							state=radio.transmit(TxPacket,32*(highlow+1));
+								
+							if(state==RADIOLIB_ERR_NONE)					{	Serial.println(F("[SX1278] Packet transmitted successfully!"));	}
+							else if(state==RADIOLIB_ERR_PACKET_TOO_LONG)	{	Serial.println(F("[SX1278] Packet too long!"));					}
+							else if(state==RADIOLIB_ERR_TX_TIMEOUT)			{	Serial.println(F("[SX1278] Timed out while transmitting!"));	}
+							else											{	Serial.println(F("[SX1278] Failed to transmit packet, code "));
+																				Serial.println(state);											}
+							
+							break;
+				
+				// frequency adjustment commands
+				
+				case '+':	if(frequency<MAX_FREQUENCY)	frequency+=FINE_STEP;
+							if(frequency>MAX_FREQUENCY)	frequency=MAX_FREQUENCY;
+							update_frequency(frequency);
+							break;
+				
+				case '-':	if(frequency>MIN_FREQUENCY)	frequency-=FINE_STEP;
+							if(frequency<MIN_FREQUENCY)	frequency=MIN_FREQUENCY;
+							update_frequency(frequency);
+							break;
+				
+				case 'u':	if(frequency<MAX_FREQUENCY)	frequency+=COARSE_STEP;
+							if(frequency>MAX_FREQUENCY)	frequency=MAX_FREQUENCY;
+							update_frequency(frequency);
+							break;
+							
+				case 'd':	if(frequency>MIN_FREQUENCY)	frequency-=COARSE_STEP;
+							if(frequency<MIN_FREQUENCY)	frequency=MIN_FREQUENCY;
+							update_frequency(frequency);
+							break;
+							
+				case 'U':	if(frequency<MAX_FREQUENCY)	frequency+=VERY_COARSE_STEP;
+							if(frequency>MAX_FREQUENCY)	frequency=MAX_FREQUENCY;
+							update_frequency(frequency);
+							break;
+							
+				case 'D':	if(frequency>MIN_FREQUENCY)	frequency-=VERY_COARSE_STEP;
+							if(frequency<MIN_FREQUENCY)	frequency=MIN_FREQUENCY;
+							update_frequency(frequency);
+							break;
+							
+				
+				default:	// do nowt
+							break;
+			}
 		}
 	}
-	
-#if 0
-	uint8_t version=LoRaPlusFSK.readRegister(REG_VERSION);
-	Serial.print("LoRa chip version: ");
-	Serial.println(version);
-#endif
-#if 0
-	
-	uint8_t TxPacket[]={0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa};
-	uint16_t TxPacketLength=32;
-	
-	LoRaPlusFSK.beginPacket(false);
-	LoRaPlusFSK.write(TxPacket,TxPacketLength);
-	LoRaPlusFSK.endPacket(false);
-#endif
+	else
+	{
+		
+		
+		
+	}
+
 #if 0
 	digitalWrite(GREEN_LED,HIGH);
 	delay(50);
