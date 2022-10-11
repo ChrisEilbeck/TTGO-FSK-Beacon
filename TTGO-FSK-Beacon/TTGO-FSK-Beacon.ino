@@ -5,13 +5,49 @@
 
 #include <EEPROM.h>
 #include <RadioLib.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+
+// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
+#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+#define LOGO_HEIGHT   16
+#define LOGO_WIDTH    16
+static const unsigned char PROGMEM logo_bmp[] =
+{
+	B00000000, B11000000,
+	B00000001, B11000000,
+	B00000001, B11000000,
+	B00000011, B11100000,
+	B11110011, B11100000,
+	B11111110, B11111000,
+	B01111110, B11111111,
+	B00110011, B10011111,
+	B00011111, B11111100,
+	B00001101, B01110000,
+	B00011011, B10100000,
+	B00111111, B11100000,
+	B00111111, B11110000,
+	B01111100, B11110000,
+	B01110000, B01110000,
+	B00000000, B00110000
+};
+
+#define DISPLAYUPDATEPERIOD	250
+  
 // SX1278 has the following connections:
 
 #define LoRa_NSS	18
 #define LoRa_DIO0	26
-#define LoRa_RESET	-1
+#define LoRa_RESET	23
 #define LoRa_DIO1	-1
+
+#define BATTERYVOLTAGE		35
+#define BATTERYCALVALUE		1.734
 
 #define EEPROM_SIZE 		8
 
@@ -25,6 +61,31 @@
 
 SX1278 radio=new Module(LoRa_NSS,LoRa_DIO0,LoRa_RESET,LoRa_DIO1);
 float frequency=DEFAULT_FREQUENCY;
+int txperiod=2000;
+
+void tripleflash(void)
+{
+	digitalWrite(GREEN_LED,HIGH);
+	delay(100);
+	digitalWrite(GREEN_LED,LOW);
+	delay(100);
+	digitalWrite(GREEN_LED,HIGH);
+	delay(100);
+	digitalWrite(GREEN_LED,LOW);
+	delay(100);
+	digitalWrite(GREEN_LED,HIGH);
+	delay(100);
+	digitalWrite(GREEN_LED,LOW);
+}
+
+float readbatteryvoltage(void)
+{
+//	return(3850.0f);
+	
+	int adcvalue=analogRead(BATTERYVOLTAGE);
+	
+	return(BATTERYCALVALUE*(float)adcvalue);
+}
 
 void update_frequency(float freq)
 {
@@ -45,25 +106,44 @@ void update_frequency(float freq)
     EEPROM.write(2,buffer[2]);
     EEPROM.write(3,buffer[3]);
 	
-	
-	
-	
-	
-	
     EEPROM.commit();
+}
+
+void drawtext(char *string,int y,int size)
+{
+	display.setCursor(64-8*strlen(string)*size/2,y);
+	display.setTextSize(size);
+	display.print(string);
+}
+
+void displaymenu(void)
+{
+	Serial.print("TTGO-FSK-BEACON\r\n===============\r\n\n");
+	Serial.print("Command menu\r\n------------\r\n\n");
+	Serial.print("\tt\t-\tTransmit a burst\r\n");
+	Serial.print("\t0\t-\tRestore default settings\r\n");
+	Serial.print("\t+/u/U\t-\tIncrease frequency in fine, coarse or very coarse steps\r\n");
+	Serial.print("\t-/d/D\t-\tDecrease frequency in fine, coarse or very coarse steps\r\n");
+	Serial.print("\tl/L\t-\tGreen LED on/off\r\n");
+	Serial.print("\tr\t-\tEnter run mode\r\n");
+	Serial.print("\tc\t-\tStay in config mode, don't exit to run mode\r\n");
+	Serial.print("\tm\t-\tRe-display this menu\r\n");
+	Serial.println();
 }
 
 void setup(void)
 {
 	Serial.begin(115200);
 	
+	Serial.println("Press the C key to stay in config mode, you have 30 seconds ...");
+	
 	// initialize SX1278 FSK modem with default settings
-	Serial.print(F("[SX1278] Initializing ... "));
+//	Serial.print(F("[SX1278] Initializing ... "));
 	
 	int state = radio.beginFSK();
 	if(state==RADIOLIB_ERR_NONE)
 	{
-		Serial.println(F("success!"));
+		Serial.println(F("Radio module configured"));
 	}
 	else 
 	{
@@ -72,7 +152,18 @@ void setup(void)
 		while (true);
 	}
 	
-	EEPROM.begin(EEPROM_SIZE);
+	// SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+	if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
+	{
+		Serial.println(F("SSD1306 allocation failed"));
+		for(;;); // Don't proceed, loop forever
+	}
+	
+	// Clear the buffer
+	display.clearDisplay();
+	display.display();
+	
+  	EEPROM.begin(EEPROM_SIZE);
 	
 	uint8_t buffer[4];
 	float freqval;
@@ -111,45 +202,90 @@ void setup(void)
 	// the following settings can also
 	// be modified at run-time
 	state = radio.setFrequency(frequency);
-	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+//	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
-	state = radio.setBitRate(1.2);
-	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	state = radio.setBitRate(2.4);
+//	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state = radio.setFrequencyDeviation(10.0);
-	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+//	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state = radio.setRxBandwidth(250.0);
-	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+//	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state = radio.setOutputPower(3.0);
-	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+//	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state = radio.setCurrentLimit(100);
-	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+//	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state = radio.setDataShaping(RADIOLIB_SHAPING_0_5);
-	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+//	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	
+	state = radio.setEncoding(RADIOLIB_ENCODING_NRZ);
+//	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	uint8_t syncWord[]={	0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa	};
 	
 	state = radio.setSyncWord(syncWord, 8);
-	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+//	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	pinMode(GREEN_LED,OUTPUT);
 	digitalWrite(GREEN_LED,LOW);
+	
+	displaymenu();
 }
 
 void loop(void)
 {
-	if(Serial)
+	static int runmode=0;
+	static int configmode=0;
+	
+	if(millis()<(3*60*1000))
 	{
-		uint8_t TxPacket[255];
-		uint16_t TxPacketLength=8;
+		static int displaylastupdate=0;
+		
+		if(millis()>(displaylastupdate+DISPLAYUPDATEPERIOD))
+		{
+			float batvolt=readbatteryvoltage();
+			
+			display.clearDisplay();
+			
+			display.setTextColor(WHITE);
+			
+			display.setTextSize(1);
+			display.setCursor(16,0);
+			display.print("Battery Voltage");
+			
+			display.setTextSize(2);
+			display.setCursor(24,12);
+			display.printf("%4.0fmV",batvolt);
+			
+			display.setTextSize(1);
+			display.setCursor(38,36);
+			display.print("Frequency");
+			
+			display.setTextSize(2);
+			display.setCursor(16,48);
+			display.printf("%3.3fM",frequency);
+			
+			display.display(); 		
+		
+			displaylastupdate=millis();
+		}
+	}
+	else
+	{
+		// turn the display off and everything else other than the radio that we can
+		
+		display.clearDisplay();
+		display.display(); 		
+	}
+	
+	if(!runmode)
+	{
 		int state;
 		static int highlow=0;
-		
-		memset(TxPacket,0xaa,255);
 		
 		if(Serial.available())
 		{
@@ -157,33 +293,25 @@ void loop(void)
 			
 			Serial.write(byte);
 			
-			digitalWrite(GREEN_LED,HIGH);
-			delay(50);
-			digitalWrite(GREEN_LED,LOW);
-			
 			switch(byte)
 			{
-				case 'l':
-				case 'L':	state = radio.setBitRate(1.2);
-							if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
-							highlow=0;
-							break;
-							
-				case 'h':
-				case 'H':	state = radio.setBitRate(2.4);
-							if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
-							highlow=1;
-							break;
-							
 				case 't':
-				case 'T':	
-							state=radio.transmit(TxPacket,32*(highlow+1));
+				case 'T':	{
+								uint8_t TxPacket[256];
+								uint16_t TxPacketLength=32;
 								
-							if(state==RADIOLIB_ERR_NONE)					{	Serial.println(F("[SX1278] Packet transmitted successfully!"));	}
-							else if(state==RADIOLIB_ERR_PACKET_TOO_LONG)	{	Serial.println(F("[SX1278] Packet too long!"));					}
-							else if(state==RADIOLIB_ERR_TX_TIMEOUT)			{	Serial.println(F("[SX1278] Timed out while transmitting!"));	}
-							else											{	Serial.println(F("[SX1278] Failed to transmit packet, code "));
-																				Serial.println(state);											}
+								memset(TxPacket,0xaa,256);
+								state=radio.transmit(TxPacket,TxPacketLength);
+									
+								if(state==RADIOLIB_ERR_NONE)					
+								{
+//									Serial.println(F("[SX1278] Packet transmitted successfully!"));	
+								}
+								else if(state==RADIOLIB_ERR_PACKET_TOO_LONG)	{	Serial.println(F("[SX1278] Packet too long!"));					}
+								else if(state==RADIOLIB_ERR_TX_TIMEOUT)			{	Serial.println(F("[SX1278] Timed out while transmitting!"));	}
+								else											{	Serial.println(F("[SX1278] Failed to transmit packet, code "));
+																					Serial.println(state);											}
+							}
 							
 							break;
 				
@@ -222,33 +350,84 @@ void loop(void)
 							if(frequency<MIN_FREQUENCY)	frequency=MIN_FREQUENCY;
 							update_frequency(frequency);
 							break;
-							
 				
+				// misc features
+				
+				case 'l':	digitalWrite(GREEN_LED,HIGH);
+							break;
+				
+				case 'L':	digitalWrite(GREEN_LED,LOW);
+							break;
+				
+				case 'r':
+				case 'R':	runmode=1;
+							Serial.println("Entering run mode");
+							tripleflash();
+							break;
+				
+				case 'c':	configmode=!configmode;
+							if(configmode)	Serial.println("Entering config mode, will not go into run mode after 30 seconds operation");
+							else			Serial.println("Exiting config mode, will go into run mode after 30 seconds operation");
+							
+							break;
+				
+				case 'm':
+				case 'M':	displaymenu();
+							break;
+							
 				default:	// do nowt
 							break;
 			}
 		}
+		
+		if(		!configmode
+			&&	(millis()>(30*1000))	)
+		{
+			Serial.println("Exiting config mode");
+			tripleflash();
+			runmode=1;
+		}
 	}
 	else
 	{
+		static int lasttx=0;
 		
-		
-		
+		if(millis()>(lasttx+txperiod))
+		{
+			uint8_t TxPacket[256];
+			int state;
+			
+			lasttx=millis();
+			
+			memset(TxPacket,0xaa,32);
+			digitalWrite(GREEN_LED,HIGH);
+			state=radio.transmit(TxPacket,32);
+			digitalWrite(GREEN_LED,LOW);
+			
+			if(state==RADIOLIB_ERR_NONE)
+			{
+//				Serial.println(F("[SX1278] Packet transmitted successfully!"));	
+			}
+			else if(state==RADIOLIB_ERR_PACKET_TOO_LONG)	{	Serial.println(F("[SX1278] Packet too long!"));					}
+			else if(state==RADIOLIB_ERR_TX_TIMEOUT)			{	Serial.println(F("[SX1278] Timed out while transmitting!"));	}
+			else											{	Serial.println(F("[SX1278] Failed to transmit packet, code "));
+																Serial.println(state);											}
+			delay(100);
+			
+			memset(TxPacket,0xaa,32);
+			digitalWrite(GREEN_LED,HIGH);
+			state=radio.transmit(TxPacket,32);
+			digitalWrite(GREEN_LED,LOW);
+			
+			if(state==RADIOLIB_ERR_NONE)
+			{
+//				Serial.println(F("[SX1278] Packet transmitted successfully!"));
+			}
+			else if(state==RADIOLIB_ERR_PACKET_TOO_LONG)	{	Serial.println(F("[SX1278] Packet too long!"));					}
+			else if(state==RADIOLIB_ERR_TX_TIMEOUT)			{	Serial.println(F("[SX1278] Timed out while transmitting!"));	}
+			else											{	Serial.println(F("[SX1278] Failed to transmit packet, code "));
+																Serial.println(state);											}
+		}
 	}
-
-#if 0
-	digitalWrite(GREEN_LED,HIGH);
-	delay(50);
-	digitalWrite(GREEN_LED,LOW);
-	delay(50);
-	digitalWrite(GREEN_LED,HIGH);
-	delay(50);
-	digitalWrite(GREEN_LED,LOW);
-	delay(50);
-	digitalWrite(GREEN_LED,HIGH);
-	delay(50);
-	digitalWrite(GREEN_LED,LOW);
-	delay(750);
-#endif
 }
 
