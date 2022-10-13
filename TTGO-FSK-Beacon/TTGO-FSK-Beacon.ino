@@ -54,7 +54,7 @@ static const unsigned char PROGMEM logo_bmp[] =
 	#define LoRa_RESET	23
 	#define LoRa_DIO1	-1
 #endif
-#ifdef LILYGO_T95_V1_0
+#ifdef ARDUINO_TTGO_LoRa32_V1
 	#define LoRa_NSS	5
 	#define LoRa_DIO0	26
 	#define LoRa_RESET	4
