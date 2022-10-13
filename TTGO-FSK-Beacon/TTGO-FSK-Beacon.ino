@@ -1,5 +1,8 @@
 
-//#include "LoRaPlusFSK.h"
+#ifdef ARDUINO_TBeam
+	#include <axp20x.h>
+	AXP20X_Class axp;
+#endif
 
 #define GREEN_LED	25
 
@@ -38,13 +41,25 @@ static const unsigned char PROGMEM logo_bmp[] =
 };
 
 #define DISPLAYUPDATEPERIOD	250
-  
-// SX1278 has the following connections:
 
-#define LoRa_NSS	18
-#define LoRa_DIO0	26
-#define LoRa_RESET	23
-#define LoRa_DIO1	-1
+#ifdef ARDUINO_TBeam
+	#define LoRa_NSS	18
+	#define LoRa_DIO0	26
+	#define LoRa_RESET	14
+	#define LoRa_DIO1	-1
+#endif
+#ifdef ARDUINO_TTGO_LoRa32_v21new
+	#define LoRa_NSS	18
+	#define LoRa_DIO0	26
+	#define LoRa_RESET	23
+	#define LoRa_DIO1	-1
+#endif
+#ifdef LILYGO_T95_V1_0
+	#define LoRa_NSS	5
+	#define LoRa_DIO0	26
+	#define LoRa_RESET	4
+	#define LoRa_DIO1	-1
+#endif
 
 #define BATTERYVOLTAGE		35
 #define BATTERYCALVALUE		1.734
@@ -131,8 +146,42 @@ void displaymenu(void)
 	Serial.println();
 }
 
+int SetupPMIC(void)
+{
+#ifdef ARDUINO_TBeam
+	Serial.print("Initialising the AXP192: ");
+	if(!axp.begin(Wire, AXP192_SLAVE_ADDRESS))	{	Serial.println(" PASS\r\n");				} 
+	else                                        {	Serial.println(" FAIL\r\n");	return(1);	}
+	
+	axp.setPowerOutPut(AXP192_DCDC1,AXP202_ON);
+	axp.setPowerOutPut(AXP192_DCDC2,AXP202_OFF);
+	axp.setPowerOutPut(AXP192_DCDC3,AXP202_ON);
+	axp.setPowerOutPut(AXP192_LDO2,AXP202_ON);
+	axp.setPowerOutPut(AXP192_LDO3,AXP202_OFF);
+	axp.setPowerOutPut(AXP192_EXTEN,AXP202_ON);
+	
+	axp.setDCDC1Voltage(3300);
+	
+	Serial.printf("\tDCDC1 2v5: %s\r\n",axp.isDCDC1Enable()?"ENABLE":"DISABLE");
+	Serial.printf("\tDCDC2 Not Used: %s\r\n",axp.isDCDC2Enable()?"ENABLE":"DISABLE");
+	Serial.printf("\tDCDC3 3v3: %s\r\n",axp.isDCDC3Enable()?"ENABLE":"DISABLE");
+	Serial.printf("\tLDO2 LoRa: %s\r\n",axp.isLDO2Enable()?"ENABLE":"DISABLE");
+	Serial.printf("\tLDO3 GPS: %s\r\n",axp.isLDO3Enable()?"ENABLE":"DISABLE");
+	Serial.printf("\tExten: %s\r\n\n",axp.isExtenEnable()?"ENABLE":"DISABLE");
+
+	if(axp.isChargeingEnable())	{	Serial.print("Charging is enabled\r\n\n");	}
+	else						{	Serial.print("Charging is disabled\r\n\n");	}
+	
+	axp.adc1Enable(AXP202_BATT_CUR_ADC1,true);
+#endif
+	
+	return(0);
+}
+
 void setup(void)
 {
+	SetupPMIC();
+	
 	Serial.begin(115200);
 	
 	Serial.println("Press the C key to stay in config mode, you have 30 seconds ...");
@@ -147,7 +196,7 @@ void setup(void)
 	}
 	else 
 	{
-		Serial.print(F("failed, code "));
+		Serial.print(F("Radio module not found: failure code "));
 		Serial.println(state);
 		while (true);
 	}
