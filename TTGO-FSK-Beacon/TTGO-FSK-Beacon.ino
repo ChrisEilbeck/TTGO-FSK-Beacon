@@ -1,3 +1,5 @@
+//  DCB  manual added a define for T95 - uncomment out if being used
+//#define LILYGO_T95_V1_0
 
 #ifdef ARDUINO_TBeam
 	#include <axp20x.h>
@@ -58,7 +60,23 @@ static const unsigned char PROGMEM logo_bmp[] =
 	#define LoRa_NSS	5
 	#define LoRa_DIO0	26
 	#define LoRa_RESET	4
-	#define LoRa_DIO1	-1
+#define LoRa_DIO1	-1
+#endif
+
+//DCB added definition settings  for T95
+#if defined LILYGO_T95_V1_0
+  #define LoRa_NSS  5
+  #define LoRa_DIO0 26
+  #define LoRa_RESET  4
+  #define LoRa_DIO1 -1
+
+  
+  #define LoRa_SCLK_PIN              18
+  #define LoRa_MISO_PIN              19
+  #define LoRa_MOSI_PIN              23
+  #define I2C_SDA                     21
+  #define I2C_SCL                     22
+
 #endif
 
 #define BATTERYVOLTAGE		35
@@ -183,8 +201,19 @@ void setup(void)
 	SetupPMIC();
 	
 	Serial.begin(115200);
+ //DCB needed for T95 Startup
+ #if defined LILYGO_T95_V1_0
+ SPI.begin(LoRa_SCLK_PIN, LoRa_MISO_PIN, LoRa_MOSI_PIN);
+ Wire.begin(I2C_SDA, I2C_SCL);
+ 
+ #endif
+ 
+
+
 	
 	Serial.println("Press the C key to stay in config mode, you have 30 seconds ...");
+  
+  
 	
 	// initialize SX1278 FSK modem with default settings
 //	Serial.print(F("[SX1278] Initializing ... "));
@@ -479,4 +508,3 @@ void loop(void)
 		}
 	}
 }
-
