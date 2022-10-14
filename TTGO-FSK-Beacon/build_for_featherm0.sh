@@ -3,7 +3,7 @@
 VERBOSE=--verbose
 
 arduino-cli compile \
-	--fqbn esp32:esp32:ttgo-lora32-v1 \
+	--fqbn adafruit:samd:adafruit_feather_m0 \
 	${VERBOSE} \
 	TTGO-FSK-Beacon.ino
 

@@ -6,7 +6,11 @@
 
 #define GREEN_LED	25
 
-#include <EEPROM.h>
+#ifndef ADAFRUIT_FEATHER_M0
+	// eeprom is not supported by the chip on the Adafruit Feather M0
+	#include <EEPROM.h>
+#endif
+
 #include <RadioLib.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -42,6 +46,8 @@ static const unsigned char PROGMEM logo_bmp[] =
 
 #define DISPLAYUPDATEPERIOD	250
 
+// pin assignments for various boards we support
+
 #ifdef ARDUINO_TBeam
 	#define LoRa_NSS	18
 	#define LoRa_DIO0	26
@@ -57,6 +63,12 @@ static const unsigned char PROGMEM logo_bmp[] =
 #ifdef ARDUINO_TTGO_LoRa32_V1
 	#define LoRa_NSS	5
 	#define LoRa_DIO0	26
+	#define LoRa_RESET	4
+	#define LoRa_DIO1	-1
+#endif
+#ifdef ADAFRUIT_FEATHER_M0
+	#define LoRa_NSS	8
+	#define LoRa_DIO0	3
 	#define LoRa_RESET	4
 	#define LoRa_DIO1	-1
 #endif
@@ -111,6 +123,7 @@ void update_frequency(float freq)
 	Serial.printf("%03.3f MHz",freq);
 	Serial.println();
 	
+#ifndef ADAFRUIT_FEATHER_M0
 	// store the frequency to eeprom
 	
 	uint8_t buffer[4];
@@ -122,6 +135,7 @@ void update_frequency(float freq)
     EEPROM.write(3,buffer[3]);
 	
     EEPROM.commit();
+#endif
 }
 
 void drawtext(char *string,int y,int size)
@@ -211,7 +225,8 @@ void setup(void)
 	// Clear the buffer
 	display.clearDisplay();
 	display.display();
-	
+
+#ifndef ADAFRUIT_FEATHER_M0
   	EEPROM.begin(EEPROM_SIZE);
 	
 	uint8_t buffer[4];
@@ -221,7 +236,7 @@ void setup(void)
 	buffer[1]=EEPROM.read(1);
 	buffer[2]=EEPROM.read(2);
 	buffer[3]=EEPROM.read(3);
-	
+
 	memcpy((uint8_t *)&freqval,buffer,4);
 	
 	if(		(freqval<MIN_FREQUENCY)
@@ -242,12 +257,13 @@ void setup(void)
 		Serial.printf("%03.3f MHz",frequency);
 		Serial.println();
 	}
+#else
+	frequency=DEFAULT_FREQUENCY;
+	Serial.print("Frequency: ");
+	Serial.printf("%03.3f MHz",frequency);
+	Serial.println();
+#endif
 	
-	// if needed, you can switch between LoRa and FSK modes
-	//
-	// radio.begin()       start LoRa mode (and disable FSK)
-	// radio.beginFSK()    start FSK mode (and disable LoRa)
-
 	// the following settings can also
 	// be modified at run-time
 	state = radio.setFrequency(frequency);
@@ -364,6 +380,7 @@ void loop(void)
 							
 							break;
 				
+#ifndef ADAFRUIT_FEATHER_M0
 				// frequency adjustment commands
 				
 				case '0':	frequency=DEFAULT_FREQUENCY;
@@ -399,6 +416,7 @@ void loop(void)
 							if(frequency<MIN_FREQUENCY)	frequency=MIN_FREQUENCY;
 							update_frequency(frequency);
 							break;
+#endif
 				
 				// misc features
 				
