@@ -268,6 +268,8 @@ void setup(void)
 
 	// the following settings can also
 	// be modified at run-time
+  //DCBdefault freq seems to need to be here for initial flash
+  frequency=DEFAULT_FREQUENCY;
 	state = radio.setFrequency(frequency);
 //	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
