@@ -10,5 +10,7 @@ The latest version as of 13/10/2022 also supports the TTGO T-Beam v1.1
 a.k.a. the meshtastic board.  This uses the axp192 library to control 
 the PMIC on this board.
 
+ARDUINO_TTGO_LoRa32_V1 (Lilygo T95_v1.1 Support addded)
+
 You will need to install the RadioLib library too.
 
