@@ -79,7 +79,7 @@ static const unsigned char PROGMEM logo_bmp[] =
 //  #define I2C_SCL                    22
 #endif
  
-#endif
+
 #ifdef ADAFRUIT_FEATHER_M0
 	#define LoRa_NSS	8
 	#define LoRa_DIO0	3
@@ -306,7 +306,7 @@ void setup(void)
 	// the following settings can also
 	// be modified at run-time
 
-   frequency=DEFAULT_FREQUENCY;
+ // frequency=DEFAULT_FREQUENCY;
 	state=radio.setFrequency(frequency);
 //	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
