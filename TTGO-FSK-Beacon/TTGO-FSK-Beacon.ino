@@ -1,4 +1,7 @@
 
+#define SLEEP_DURATION			2000000
+#define SLEEP_MODE_OPERATION	1
+
 #ifdef ARDUINO_TBeam
 	#include <axp20x.h>
 	AXP20X_Class axp;
@@ -203,7 +206,7 @@ void setup(void)
 	// initialize SX1278 FSK modem with default settings
 //	Serial.print(F("[SX1278] Initializing ... "));
 	
-	int state = radio.beginFSK();
+	int state=radio.beginFSK();
 	if(state==RADIOLIB_ERR_NONE)
 	{
 		Serial.println(F("Radio module configured"));
@@ -215,7 +218,7 @@ void setup(void)
 		while (true);
 	}
 	
-	// SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+	// SSD1306_SWITCHCAPVCC=generate display voltage from 3.3V internally
 	if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
 	{
 		Serial.println(F("SSD1306 allocation failed"));
@@ -266,33 +269,33 @@ void setup(void)
 	
 	// the following settings can also
 	// be modified at run-time
-	state = radio.setFrequency(frequency);
+	state=radio.setFrequency(frequency);
 //	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
-	state = radio.setBitRate(2.4);
+	state=radio.setBitRate(2.4);
 //	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
-	state = radio.setFrequencyDeviation(10.0);
+	state=radio.setFrequencyDeviation(10.0);
 //	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
-	state = radio.setRxBandwidth(250.0);
+	state=radio.setRxBandwidth(250.0);
 //	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
-	state = radio.setOutputPower(3.0);
+	state=radio.setOutputPower(10.0);
 //	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
-	state = radio.setCurrentLimit(100);
+	state=radio.setCurrentLimit(100);
 //	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
-	state = radio.setDataShaping(RADIOLIB_SHAPING_0_5);
+	state=radio.setDataShaping(RADIOLIB_SHAPING_0_5);
 //	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
-	state = radio.setEncoding(RADIOLIB_ENCODING_NRZ);
+	state=radio.setEncoding(RADIOLIB_ENCODING_NRZ);
 //	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	uint8_t syncWord[]={	0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa	};
 	
-	state = radio.setSyncWord(syncWord, 8);
+	state=radio.setSyncWord(syncWord, 8);
 //	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	pinMode(GREEN_LED,OUTPUT);
@@ -459,42 +462,45 @@ void loop(void)
 	{
 		static int lasttx=0;
 		
+#if !SLEEP_MODE_OPERATION
 		if(millis()>(lasttx+txperiod))
 		{
+#endif
 			uint8_t TxPacket[256];
 			int state;
 			
 			lasttx=millis();
 			
-			memset(TxPacket,0xaa,32);
-			digitalWrite(GREEN_LED,HIGH);
-			state=radio.transmit(TxPacket,32);
-			digitalWrite(GREEN_LED,LOW);
+			int cnt;
+			int burstcount=2;
 			
-			if(state==RADIOLIB_ERR_NONE)
+			for(cnt=0;cnt<burstcount;cnt++)
 			{
-//				Serial.println(F("[SX1278] Packet transmitted successfully!"));	
+				memset(TxPacket,0xaa,32);
+				digitalWrite(GREEN_LED,HIGH);
+				state=radio.transmit(TxPacket,32);
+				digitalWrite(GREEN_LED,LOW);
+				
+				if(state==RADIOLIB_ERR_NONE)
+				{
+//					Serial.println(F("[SX1278] Packet transmitted successfully!"));	
+				}
+				else if(state==RADIOLIB_ERR_PACKET_TOO_LONG)	{	Serial.println(F("[SX1278] Packet too long!"));					}
+				else if(state==RADIOLIB_ERR_TX_TIMEOUT)			{	Serial.println(F("[SX1278] Timed out while transmitting!"));	}
+				else											{	Serial.println(F("[SX1278] Failed to transmit packet, code "));
+																	Serial.println(state);											}
+																	
+				
+				if(cnt!=(burstcount-1))
+					delay(100);
 			}
-			else if(state==RADIOLIB_ERR_PACKET_TOO_LONG)	{	Serial.println(F("[SX1278] Packet too long!"));					}
-			else if(state==RADIOLIB_ERR_TX_TIMEOUT)			{	Serial.println(F("[SX1278] Timed out while transmitting!"));	}
-			else											{	Serial.println(F("[SX1278] Failed to transmit packet, code "));
-																Serial.println(state);											}
-			delay(100);
-			
-			memset(TxPacket,0xaa,32);
-			digitalWrite(GREEN_LED,HIGH);
-			state=radio.transmit(TxPacket,32);
-			digitalWrite(GREEN_LED,LOW);
-			
-			if(state==RADIOLIB_ERR_NONE)
-			{
-//				Serial.println(F("[SX1278] Packet transmitted successfully!"));
-			}
-			else if(state==RADIOLIB_ERR_PACKET_TOO_LONG)	{	Serial.println(F("[SX1278] Packet too long!"));					}
-			else if(state==RADIOLIB_ERR_TX_TIMEOUT)			{	Serial.println(F("[SX1278] Timed out while transmitting!"));	}
-			else											{	Serial.println(F("[SX1278] Failed to transmit packet, code "));
-																Serial.println(state);											}
+#if !SLEEP_MODE_OPERATION
 		}
+#endif
+#if SLEEP_MODE_OPERATION
+		esp_sleep_enable_timer_wakeup(SLEEP_DURATION);
+		esp_light_sleep_start();
+#endif
 	}
 }
 
