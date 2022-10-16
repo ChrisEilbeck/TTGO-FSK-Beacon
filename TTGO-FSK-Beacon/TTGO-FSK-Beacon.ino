@@ -93,25 +93,42 @@ SX1278 radio=new Module(LoRa_NSS,LoRa_DIO0,LoRa_RESET,LoRa_DIO1);
 float frequency=DEFAULT_FREQUENCY;
 int txperiod=2000;
 
+void setledon(void)
+{
+#ifdef ARDUINO_TBeam
+	axp.setChgLEDMode(AXP20X_LED_LOW_LEVEL);
+#else
+	digitalWrite(GREEN_LED,HIGH);
+#endif
+}
+
+void setledoff(void)
+{
+#ifdef ARDUINO_TBeam
+	axp.setChgLEDMode(AXP20X_LED_OFF);
+#else
+	digitalWrite(GREEN_LED,LOW);
+#endif
+}
+
 void tripleflash(void)
 {
-	digitalWrite(GREEN_LED,HIGH);
+	setledon();
 	delay(100);
-	digitalWrite(GREEN_LED,LOW);
+	setledoff();
 	delay(100);
-	digitalWrite(GREEN_LED,HIGH);
+	setledon();
 	delay(100);
-	digitalWrite(GREEN_LED,LOW);
+	setledoff();
 	delay(100);
-	digitalWrite(GREEN_LED,HIGH);
+	setledon();
 	delay(100);
-	digitalWrite(GREEN_LED,LOW);
+	setledoff();
 }
 
 float readbatteryvoltage(void)
 {
 #ifdef ARDUINO_TBeam
-	
 	float batvolt=axp.getBattVoltage();
 	return(batvolt);
 #else
@@ -146,7 +163,7 @@ void update_frequency(float freq)
 
 void displaymenu(void)
 {
-	Serial.print("TTGO-FSK-BEACON\r\n===============\r\n\n");
+	Serial.print("\nTTGO-FSK-BEACON\r\n===============\r\n\n");
 	Serial.print("Command menu\r\n------------\r\n\n");
 	Serial.print("\tt\t-\tTransmit a burst\r\n");
 	Serial.print("\t0\t-\tRestore default settings\r\n");
@@ -200,7 +217,7 @@ void setup(void)
 	
 	Serial.begin(115200);
 	
-	Serial.println("Press the C key to stay in config mode, you have 30 seconds ...");
+	Serial.println("\nPress the C key to stay in config mode, you have 30 seconds ...");
 	
 	// initialize SX1278 FSK modem with default settings
 //	Serial.print(F("[SX1278] Initializing ... "));
@@ -297,8 +314,11 @@ void setup(void)
 	state=radio.setSyncWord(syncWord, 8);
 //	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
+#ifndef ARDUINO_TBeam
 	pinMode(GREEN_LED,OUTPUT);
-	digitalWrite(GREEN_LED,LOW);
+#endif
+	
+	setledoff();
 	
 	displaymenu();
 }
@@ -359,6 +379,7 @@ void loop(void)
 			char byte=Serial.read();
 			
 			Serial.write(byte);
+			Serial.println();
 			
 			switch(byte)
 			{
@@ -427,10 +448,10 @@ void loop(void)
 							Serial.println("mV");
 							break;
 				
-				case 'l':	digitalWrite(GREEN_LED,HIGH);
+				case 'l':	setledon();
 							break;
 				
-				case 'L':	digitalWrite(GREEN_LED,LOW);
+				case 'L':	setledoff();
 							break;
 				
 				case 'r':
@@ -481,9 +502,9 @@ void loop(void)
 			for(cnt=0;cnt<burstcount;cnt++)
 			{
 				memset(TxPacket,0xaa,32);
-				digitalWrite(GREEN_LED,HIGH);
+				setledon();
 				state=radio.transmit(TxPacket,32);
-				digitalWrite(GREEN_LED,LOW);
+				setledoff();
 				
 				if(state==RADIOLIB_ERR_NONE)
 				{
