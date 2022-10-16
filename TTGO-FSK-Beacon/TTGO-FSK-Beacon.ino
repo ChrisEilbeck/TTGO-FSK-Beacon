@@ -76,7 +76,7 @@ static const unsigned char PROGMEM logo_bmp[] =
 	#define LoRa_DIO1	-1
 #endif
 
-#define BATTERYVOLTAGE		35
+#define BATTERYVOLTAGEPIN	35
 #define BATTERYCALVALUE		1.734
 
 #define EEPROM_SIZE 		8
@@ -110,11 +110,14 @@ void tripleflash(void)
 
 float readbatteryvoltage(void)
 {
-//	return(3850.0f);
+#ifdef ARDUINO_TBeam
 	
-	int adcvalue=analogRead(BATTERYVOLTAGE);
-	
+	float batvolt=axp.getBattVoltage();
+	return(batvolt);
+#else
+	int adcvalue=analogRead(BATTERYVOLTAGEPIN);
 	return(BATTERYCALVALUE*(float)adcvalue);
+#endif
 }
 
 void update_frequency(float freq)
@@ -139,13 +142,6 @@ void update_frequency(float freq)
 	
     EEPROM.commit();
 #endif
-}
-
-void drawtext(char *string,int y,int size)
-{
-	display.setCursor(64-8*strlen(string)*size/2,y);
-	display.setTextSize(size);
-	display.print(string);
 }
 
 void displaymenu(void)
@@ -197,6 +193,9 @@ int SetupPMIC(void)
 
 void setup(void)
 {
+	Wire.begin();
+	SPI.begin();
+	
 	SetupPMIC();
 	
 	Serial.begin(115200);
@@ -422,6 +421,11 @@ void loop(void)
 #endif
 				
 				// misc features
+				
+				case 'b':	Serial.print("Battery voltage: ");
+							Serial.print(readbatteryvoltage());
+							Serial.println("mV");
+							break;
 				
 				case 'l':	digitalWrite(GREEN_LED,HIGH);
 							break;
