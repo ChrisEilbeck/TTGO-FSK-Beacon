@@ -111,21 +111,6 @@ void setledoff(void)
 #endif
 }
 
-void tripleflash(void)
-{
-	setledon();
-	delay(100);
-	setledoff();
-	delay(100);
-	setledon();
-	delay(100);
-	setledoff();
-	delay(100);
-	setledon();
-	delay(100);
-	setledoff();
-}
-
 float readbatteryvoltage(void)
 {
 #ifdef ARDUINO_TBeam
@@ -255,17 +240,21 @@ void setup(void)
 	buffer[1]=EEPROM.read(1);
 	buffer[2]=EEPROM.read(2);
 	buffer[3]=EEPROM.read(3);
-
+	
+#if 0
+	Serial.println(buffer[0],HEX);
+	Serial.println(buffer[1],HEX);
+	Serial.println(buffer[2],HEX);
+	Serial.println(buffer[3],HEX);
+#endif
+	
 	memcpy((uint8_t *)&freqval,buffer,4);
 	
 	if(		(freqval<MIN_FREQUENCY)
-		||	(freqval>MAX_FREQUENCY)		)
+		||	(freqval>MAX_FREQUENCY)
+		||	isnan(freqval)				)
 	{
 		Serial.println("Stored frequency is invalid, subsituting the default");
-		Serial.println(buffer[0],HEX);
-		Serial.println(buffer[1],HEX);
-		Serial.println(buffer[2],HEX);
-		Serial.println(buffer[3],HEX);
 		frequency=DEFAULT_FREQUENCY;
 		update_frequency(frequency);
 	}
@@ -389,7 +378,9 @@ void loop(void)
 								uint16_t TxPacketLength=32;
 								
 								memset(TxPacket,0xaa,256);
+								setledon();
 								state=radio.transmit(TxPacket,TxPacketLength);
+								setledoff();
 									
 								if(state==RADIOLIB_ERR_NONE)					
 								{
@@ -457,7 +448,6 @@ void loop(void)
 				case 'r':
 				case 'R':	runmode=1;
 							Serial.println("Entering run mode");
-							tripleflash();
 							break;
 				
 				case 'c':	configmode=!configmode;
@@ -479,7 +469,6 @@ void loop(void)
 			&&	(millis()>(30*1000))	)
 		{
 			Serial.println("Exiting config mode");
-			tripleflash();
 			runmode=1;
 		}
 	}
