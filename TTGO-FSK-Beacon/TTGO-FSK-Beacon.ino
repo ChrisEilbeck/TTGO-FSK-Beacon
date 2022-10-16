@@ -1,3 +1,7 @@
+
+#define SLEEP_DURATION			2000000
+#define SLEEP_MODE_OPERATION	1
+
 #ifdef ARDUINO_TBeam
 	#include <axp20x.h>
 	AXP20X_Class axp;
@@ -5,7 +9,11 @@
 
 #define GREEN_LED	25
 
-#include <EEPROM.h>
+#ifndef ADAFRUIT_FEATHER_M0
+	// eeprom is not supported by the chip on the Adafruit Feather M0
+	#include <EEPROM.h>
+#endif
+
 #include <RadioLib.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -41,6 +49,8 @@ static const unsigned char PROGMEM logo_bmp[] =
 
 #define DISPLAYUPDATEPERIOD	250
 
+// pin assignments for various boards we support
+
 #ifdef ARDUINO_TBeam
 	#define LoRa_NSS	18
 	#define LoRa_DIO0	26
@@ -53,12 +63,11 @@ static const unsigned char PROGMEM logo_bmp[] =
 	#define LoRa_RESET	23
 	#define LoRa_DIO1	-1
 #endif
-
 #ifdef ARDUINO_TTGO_LoRa32_V1
 	#define LoRa_NSS	5
 	#define LoRa_DIO0	26
 	#define LoRa_RESET	4
-  #define LoRa_DIO1	-1
+	#define LoRa_DIO1	-1
 
 //DCB
 //these need enabling if Lilygo T95_v1.1 version is being  used (the one that needs the uploader tool T-U2T)
@@ -69,9 +78,16 @@ static const unsigned char PROGMEM logo_bmp[] =
 //  #define I2C_SDA                    21
 //  #define I2C_SCL                    22
 #endif
+ 
+#endif
+#ifdef ADAFRUIT_FEATHER_M0
+	#define LoRa_NSS	8
+	#define LoRa_DIO0	3
+	#define LoRa_RESET	4
+	#define LoRa_DIO1	-1
+#endif
 
-
-#define BATTERYVOLTAGE		35
+#define BATTERYVOLTAGEPIN	35
 #define BATTERYCALVALUE		1.734
 
 #define EEPROM_SIZE 		8
@@ -88,28 +104,48 @@ SX1278 radio=new Module(LoRa_NSS,LoRa_DIO0,LoRa_RESET,LoRa_DIO1);
 float frequency=DEFAULT_FREQUENCY;
 int txperiod=2000;
 
+void setledon(void)
+{
+#ifdef ARDUINO_TBeam
+	axp.setChgLEDMode(AXP20X_LED_LOW_LEVEL);
+#else
+	digitalWrite(GREEN_LED,HIGH);
+#endif
+}
+
+void setledoff(void)
+{
+#ifdef ARDUINO_TBeam
+	axp.setChgLEDMode(AXP20X_LED_OFF);
+#else
+	digitalWrite(GREEN_LED,LOW);
+#endif
+}
+
 void tripleflash(void)
 {
-	digitalWrite(GREEN_LED,HIGH);
+	setledon();
 	delay(100);
-	digitalWrite(GREEN_LED,LOW);
+	setledoff();
 	delay(100);
-	digitalWrite(GREEN_LED,HIGH);
+	setledon();
 	delay(100);
-	digitalWrite(GREEN_LED,LOW);
+	setledoff();
 	delay(100);
-	digitalWrite(GREEN_LED,HIGH);
+	setledon();
 	delay(100);
-	digitalWrite(GREEN_LED,LOW);
+	setledoff();
 }
 
 float readbatteryvoltage(void)
 {
-//	return(3850.0f);
-	
-	int adcvalue=analogRead(BATTERYVOLTAGE);
-	
+#ifdef ARDUINO_TBeam
+	float batvolt=axp.getBattVoltage();
+	return(batvolt);
+#else
+	int adcvalue=analogRead(BATTERYVOLTAGEPIN);
 	return(BATTERYCALVALUE*(float)adcvalue);
+#endif
 }
 
 void update_frequency(float freq)
@@ -121,6 +157,7 @@ void update_frequency(float freq)
 	Serial.printf("%03.3f MHz",freq);
 	Serial.println();
 	
+#ifndef ADAFRUIT_FEATHER_M0
 	// store the frequency to eeprom
 	
 	uint8_t buffer[4];
@@ -132,18 +169,12 @@ void update_frequency(float freq)
     EEPROM.write(3,buffer[3]);
 	
     EEPROM.commit();
-}
-
-void drawtext(char *string,int y,int size)
-{
-	display.setCursor(64-8*strlen(string)*size/2,y);
-	display.setTextSize(size);
-	display.print(string);
+#endif
 }
 
 void displaymenu(void)
 {
-	Serial.print("TTGO-FSK-BEACON\r\n===============\r\n\n");
+	Serial.print("\nTTGO-FSK-BEACON\r\n===============\r\n\n");
 	Serial.print("Command menu\r\n------------\r\n\n");
 	Serial.print("\tt\t-\tTransmit a burst\r\n");
 	Serial.print("\t0\t-\tRestore default settings\r\n");
@@ -190,24 +221,28 @@ int SetupPMIC(void)
 
 void setup(void)
 {
-	SetupPMIC();
-	
-	Serial.begin(115200);
- //DCB needed for T95 Startup
+
+  //DCB needed for T95 Startup
  #if defined  LILYGO_T95_V1_0
  SPI.begin(LoRa_SCLK_PIN, LoRa_MISO_PIN, LoRa_MOSI_PIN);
  Wire.begin(I2C_SDA, I2C_SCL);
  #endif
- 
+  
+	Wire.begin();
+	SPI.begin();
 	
-	Serial.println("Press the C key to stay in config mode, you have 30 seconds ...");
-  
-  
+	SetupPMIC();
+
+
+	
+	Serial.begin(115200);
+	
+	Serial.println("\nPress the C key to stay in config mode, you have 30 seconds ...");
 	
 	// initialize SX1278 FSK modem with default settings
 //	Serial.print(F("[SX1278] Initializing ... "));
 	
-	int state = radio.beginFSK();
+	int state=radio.beginFSK();
 	if(state==RADIOLIB_ERR_NONE)
 	{
 		Serial.println(F("Radio module configured"));
@@ -219,7 +254,7 @@ void setup(void)
 		while (true);
 	}
 	
-	// SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+	// SSD1306_SWITCHCAPVCC=generate display voltage from 3.3V internally
 	if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
 	{
 		Serial.println(F("SSD1306 allocation failed"));
@@ -229,7 +264,8 @@ void setup(void)
 	// Clear the buffer
 	display.clearDisplay();
 	display.display();
-	
+
+#ifndef ADAFRUIT_FEATHER_M0
   	EEPROM.begin(EEPROM_SIZE);
 	
 	uint8_t buffer[4];
@@ -239,7 +275,7 @@ void setup(void)
 	buffer[1]=EEPROM.read(1);
 	buffer[2]=EEPROM.read(2);
 	buffer[3]=EEPROM.read(3);
-	
+
 	memcpy((uint8_t *)&freqval,buffer,4);
 	
 	if(		(freqval<MIN_FREQUENCY)
@@ -260,47 +296,51 @@ void setup(void)
 		Serial.printf("%03.3f MHz",frequency);
 		Serial.println();
 	}
+#else
+	frequency=DEFAULT_FREQUENCY;
+	Serial.print("Frequency: ");
+	Serial.printf("%03.3f MHz",frequency);
+	Serial.println();
+#endif
 	
-	// if needed, you can switch between LoRa and FSK modes
-	//
-	// radio.begin()       start LoRa mode (and disable FSK)
-	// radio.beginFSK()    start FSK mode (and disable LoRa)
-
 	// the following settings can also
 	// be modified at run-time
-  //DCBdefault freq seems to need to be here for initial flash
-  frequency=DEFAULT_FREQUENCY;
-	state = radio.setFrequency(frequency);
+
+   frequency=DEFAULT_FREQUENCY;
+	state=radio.setFrequency(frequency);
 //	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
-	state = radio.setBitRate(2.4);
+	state=radio.setBitRate(2.4);
 //	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
-	state = radio.setFrequencyDeviation(10.0);
+	state=radio.setFrequencyDeviation(10.0);
 //	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
-	state = radio.setRxBandwidth(250.0);
+	state=radio.setRxBandwidth(250.0);
 //	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
-	state = radio.setOutputPower(3.0);
+	state=radio.setOutputPower(10.0);
 //	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
-	state = radio.setCurrentLimit(100);
+	state=radio.setCurrentLimit(100);
 //	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
-	state = radio.setDataShaping(RADIOLIB_SHAPING_0_5);
+	state=radio.setDataShaping(RADIOLIB_SHAPING_0_5);
 //	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
-	state = radio.setEncoding(RADIOLIB_ENCODING_NRZ);
+	state=radio.setEncoding(RADIOLIB_ENCODING_NRZ);
 //	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	uint8_t syncWord[]={	0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa	};
 	
-	state = radio.setSyncWord(syncWord, 8);
+	state=radio.setSyncWord(syncWord, 8);
 //	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
+#ifndef ARDUINO_TBeam
 	pinMode(GREEN_LED,OUTPUT);
-	digitalWrite(GREEN_LED,LOW);
+#endif
+	
+	setledoff();
 	
 	displaymenu();
 }
@@ -361,6 +401,7 @@ void loop(void)
 			char byte=Serial.read();
 			
 			Serial.write(byte);
+			Serial.println();
 			
 			switch(byte)
 			{
@@ -384,6 +425,7 @@ void loop(void)
 							
 							break;
 				
+#ifndef ADAFRUIT_FEATHER_M0
 				// frequency adjustment commands
 				
 				case '0':	frequency=DEFAULT_FREQUENCY;
@@ -419,13 +461,19 @@ void loop(void)
 							if(frequency<MIN_FREQUENCY)	frequency=MIN_FREQUENCY;
 							update_frequency(frequency);
 							break;
+#endif
 				
 				// misc features
 				
-				case 'l':	digitalWrite(GREEN_LED,HIGH);
+				case 'b':	Serial.print("Battery voltage: ");
+							Serial.print(readbatteryvoltage());
+							Serial.println("mV");
 							break;
 				
-				case 'L':	digitalWrite(GREEN_LED,LOW);
+				case 'l':	setledon();
+							break;
+				
+				case 'L':	setledoff();
 							break;
 				
 				case 'r':
@@ -461,41 +509,44 @@ void loop(void)
 	{
 		static int lasttx=0;
 		
+#if !SLEEP_MODE_OPERATION
 		if(millis()>(lasttx+txperiod))
 		{
+#endif
 			uint8_t TxPacket[256];
 			int state;
 			
 			lasttx=millis();
 			
-			memset(TxPacket,0xaa,32);
-			digitalWrite(GREEN_LED,HIGH);
-			state=radio.transmit(TxPacket,32);
-			digitalWrite(GREEN_LED,LOW);
+			int cnt;
+			int burstcount=2;
 			
-			if(state==RADIOLIB_ERR_NONE)
+			for(cnt=0;cnt<burstcount;cnt++)
 			{
-//				Serial.println(F("[SX1278] Packet transmitted successfully!"));	
+				memset(TxPacket,0xaa,32);
+				setledon();
+				state=radio.transmit(TxPacket,32);
+				setledoff();
+				
+				if(state==RADIOLIB_ERR_NONE)
+				{
+//					Serial.println(F("[SX1278] Packet transmitted successfully!"));	
+				}
+				else if(state==RADIOLIB_ERR_PACKET_TOO_LONG)	{	Serial.println(F("[SX1278] Packet too long!"));					}
+				else if(state==RADIOLIB_ERR_TX_TIMEOUT)			{	Serial.println(F("[SX1278] Timed out while transmitting!"));	}
+				else											{	Serial.println(F("[SX1278] Failed to transmit packet, code "));
+																	Serial.println(state);											}
+																	
+				
+				if(cnt!=(burstcount-1))
+					delay(100);
 			}
-			else if(state==RADIOLIB_ERR_PACKET_TOO_LONG)	{	Serial.println(F("[SX1278] Packet too long!"));					}
-			else if(state==RADIOLIB_ERR_TX_TIMEOUT)			{	Serial.println(F("[SX1278] Timed out while transmitting!"));	}
-			else											{	Serial.println(F("[SX1278] Failed to transmit packet, code "));
-																Serial.println(state);											}
-			delay(100);
-			
-			memset(TxPacket,0xaa,32);
-			digitalWrite(GREEN_LED,HIGH);
-			state=radio.transmit(TxPacket,32);
-			digitalWrite(GREEN_LED,LOW);
-			
-			if(state==RADIOLIB_ERR_NONE)
-			{
-//				Serial.println(F("[SX1278] Packet transmitted successfully!"));
-			}
-			else if(state==RADIOLIB_ERR_PACKET_TOO_LONG)	{	Serial.println(F("[SX1278] Packet too long!"));					}
-			else if(state==RADIOLIB_ERR_TX_TIMEOUT)			{	Serial.println(F("[SX1278] Timed out while transmitting!"));	}
-			else											{	Serial.println(F("[SX1278] Failed to transmit packet, code "));
-																Serial.println(state);											}
+#if !SLEEP_MODE_OPERATION
 		}
+#endif
+#if SLEEP_MODE_OPERATION
+		esp_sleep_enable_timer_wakeup(SLEEP_DURATION);
+		esp_light_sleep_start();
+#endif
 	}
 }
