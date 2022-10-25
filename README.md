@@ -12,5 +12,8 @@ the PMIC on this board.
 
 ARDUINO_TTGO_LoRa32_V1 (Lilygo T95_v1.1 Support addded)
 
+25/10/22
+Latest updates from CE included now stores freq in eeprom correctly
+
 You will need to install the RadioLib library too.
 
