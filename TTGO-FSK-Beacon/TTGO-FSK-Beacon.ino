@@ -68,6 +68,7 @@ static const unsigned char PROGMEM logo_bmp[] =
 	#define LoRa_DIO0	26
 	#define LoRa_RESET	4
 	#define LoRa_DIO1	-1
+
 /*
 //DCB
 //these need enabling if Lilygo T95_v1.1 version is being  used (the one that needs the uploader tool T-U2T)
@@ -77,9 +78,9 @@ static const unsigned char PROGMEM logo_bmp[] =
   #define LoRa_MOSI_PIN              23
   #define I2C_SDA                    21
   #define I2C_SCL                    22 */
-#endif
- 
 
+  
+#endif
 #ifdef ADAFRUIT_FEATHER_M0
 	#define LoRa_NSS	8
 	#define LoRa_DIO0	3
@@ -120,21 +121,6 @@ void setledoff(void)
 #else
 	digitalWrite(GREEN_LED,LOW);
 #endif
-}
-
-void tripleflash(void)
-{
-	setledon();
-	delay(100);
-	setledoff();
-	delay(100);
-	setledon();
-	delay(100);
-	setledoff();
-	delay(100);
-	setledon();
-	delay(100);
-	setledoff();
 }
 
 float readbatteryvoltage(void)
@@ -220,20 +206,17 @@ int SetupPMIC(void)
 }
 
 void setup(void)
-{
 
-  //DCB needed for T95 Startup
+{
+ //DCB needed for T95 Startup
  #if defined  LILYGO_T95_V1_0
  SPI.begin(LoRa_SCLK_PIN, LoRa_MISO_PIN, LoRa_MOSI_PIN);
  Wire.begin(I2C_SDA, I2C_SCL);
  #endif
-  
 	Wire.begin();
 	SPI.begin();
 	
 	SetupPMIC();
-
-
 	
 	Serial.begin(115200);
 	
@@ -275,17 +258,21 @@ void setup(void)
 	buffer[1]=EEPROM.read(1);
 	buffer[2]=EEPROM.read(2);
 	buffer[3]=EEPROM.read(3);
-
+	
+#if 0
+	Serial.println(buffer[0],HEX);
+	Serial.println(buffer[1],HEX);
+	Serial.println(buffer[2],HEX);
+	Serial.println(buffer[3],HEX);
+#endif
+	
 	memcpy((uint8_t *)&freqval,buffer,4);
 	
 	if(		(freqval<MIN_FREQUENCY)
-		||	(freqval>MAX_FREQUENCY)		)
+		||	(freqval>MAX_FREQUENCY)
+		||	isnan(freqval)				)
 	{
 		Serial.println("Stored frequency is invalid, subsituting the default");
-		Serial.println(buffer[0],HEX);
-		Serial.println(buffer[1],HEX);
-		Serial.println(buffer[2],HEX);
-		Serial.println(buffer[3],HEX);
 		frequency=DEFAULT_FREQUENCY;
 		update_frequency(frequency);
 	}
@@ -305,8 +292,6 @@ void setup(void)
 	
 	// the following settings can also
 	// be modified at run-time
-
- // frequency=DEFAULT_FREQUENCY;
 	state=radio.setFrequency(frequency);
 //	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
@@ -411,7 +396,9 @@ void loop(void)
 								uint16_t TxPacketLength=32;
 								
 								memset(TxPacket,0xaa,256);
+								setledon();
 								state=radio.transmit(TxPacket,TxPacketLength);
+								setledoff();
 									
 								if(state==RADIOLIB_ERR_NONE)					
 								{
@@ -479,7 +466,6 @@ void loop(void)
 				case 'r':
 				case 'R':	runmode=1;
 							Serial.println("Entering run mode");
-							tripleflash();
 							break;
 				
 				case 'c':	configmode=!configmode;
@@ -501,7 +487,6 @@ void loop(void)
 			&&	(millis()>(30*1000))	)
 		{
 			Serial.println("Exiting config mode");
-			tripleflash();
 			runmode=1;
 		}
 	}
