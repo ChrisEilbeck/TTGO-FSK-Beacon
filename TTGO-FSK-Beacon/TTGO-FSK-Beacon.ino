@@ -6,8 +6,6 @@
 	AXP20X_Class axp;
 #endif
 
-#define GREEN_LED	25
-
 #ifndef ADAFRUIT_FEATHER_M0
 	// eeprom is not supported by the chip on the Adafruit Feather M0
 	#include <EEPROM.h>
@@ -17,12 +15,17 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
+#include "DefaultValues.h"
+#include "HardwareAbstractionLayer.h"
+
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// Reset pin # (or -1 if sharing Arduino reset pin)
+#define OLED_RESET     -1 
+Adafruit_SSD1306 display(SCREEN_WIDTH,SCREEN_HEIGHT,&Wire,OLED_RESET);
 
 #define LOGO_HEIGHT   16
 #define LOGO_WIDTH    16
@@ -46,84 +49,6 @@ static const unsigned char PROGMEM logo_bmp[] =
 	B00000000, B00110000
 };
 
-#define DISPLAY_UPDATE_PERIOD	250
-
-// pin assignments for various boards we support
-
-#ifdef ARDUINO_TBeam
-	#define LoRa_NSS				18
-	#define LoRa_DIO0				26
-	#define LoRa_RESET				14
-	#define LoRa_DIO1				-1
-	
-	#define BATTERY_VOLTAGE_PIN		-1
-	#define BATTERY_CAL_VALUE		1.734
-	
-	#define USER_BUTTON				-1
-#endif
-#ifdef ARDUINO_TTGO_LoRa32_v21new
-	#define LoRa_NSS				18
-	#define LoRa_DIO0				26
-	#define LoRa_RESET				23
-	#define LoRa_DIO1				-1
-	
-	#define BATTERY_VOLTAGE_PIN		35
-	#define BATTERY_CAL_VALUE		1.734
-	
-	#define USER_BUTTON				-1
-#endif
-#ifdef ARDUINO_TTGO_LoRa32_V1
-	#define LoRa_NSS				5
-	#define LoRa_DIO0				26
-	#define LoRa_RESET				4
-	#define LoRa_DIO1				-1
-	
-	#define BATTERY_VOLTAGE_PIN		35
-	#define BATTERY_CAL_VALUE		1.734
-	
-	#define USER_BUTTON				-1
-#endif
-#ifdef ADAFRUIT_FEATHER_M0
-	#define LoRa_NSS				8
-	#define LoRa_DIO0				3
-	#define LoRa_RESET				4
-	#define LoRa_DIO1				-1
-	
-	#define BATTERY_VOLTAGE_PIN		-1
-	#define BATTERY_CAL_VALUE		1.734
-	
-	#define USER_BUTTON				-1
-#endif
-
-#define MIN_FREQUENCY4				430.000
-#define DEFAULT_FREQUENCY4			433.920
-#define MAX_FREQUENCY4				440.000
-
-#define MIN_FREQUENCY8				868.000
-#define DEFAULT_FREQUENCY8			869.500
-#define MAX_FREQUENCY8				870.000
-
-#define MIN_FREQUENCY9				902.000
-#define DEFAULT_FREQUENCY9			915.000
-#define MAX_FREQUENCY9				930.000
-
-#define MIN_POWER_LEVEL				2
-#define DEFAULT_POWER_LEVEL			10
-#define MAX_POWER_LEVEL				17
-
-#define FINE_STEP					0.001
-#define COARSE_STEP					0.005
-#define VERY_COARSE_STEP			0.100
-
-#define EEPROM_SIZE 				8
-
-#define EEPROM_F1_ADDRESS			0x00
-#define EEPROM_F2_ADDRESS			0x01
-#define EEPROM_F3_ADDRESS			0x02
-#define EEPROM_F4_ADDRESS			0x03
-
-#define EEPROM_POWER_LEVEL_ADDRESS	0x04
-
 SX1278 radio=new Module(LoRa_NSS,LoRa_DIO0,LoRa_RESET,LoRa_DIO1);
 
 // set up some defaults in case we can't read the programmed values from the eeprom
@@ -144,12 +69,14 @@ int txperiod=2000;
 
 int power_level=DEFAULT_POWER_LEVEL;
 
+int display_starttime=0;
+
 void setledon(void)
 {
 #ifdef ARDUINO_TBeam
 	axp.setChgLEDMode(AXP20X_LED_LOW_LEVEL);
 #else
-	digitalWrite(GREEN_LED,HIGH);
+	digitalWrite(USER_LED,HIGH);
 #endif
 }
 
@@ -158,7 +85,7 @@ void setledoff(void)
 #ifdef ARDUINO_TBeam
 	axp.setChgLEDMode(AXP20X_LED_OFF);
 #else
-	digitalWrite(GREEN_LED,LOW);
+	digitalWrite(USER_LED,LOW);
 #endif
 }
 
@@ -342,39 +269,37 @@ void setup(void)
 	Serial.print(power_level);
 	Serial.println(" dBm");
 	
-	// the following settings can also
-	// be modified at run-time
 	state=radio.setFrequency(frequency);
-//	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state=radio.setBitRate(2.4);
-//	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state=radio.setFrequencyDeviation(10.0);
-//	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state=radio.setOutputPower((float)power_level);
-//	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state=radio.setCurrentLimit(100);
-//	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state=radio.setDataShaping(RADIOLIB_SHAPING_0_5);
-//	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state=radio.setEncoding(RADIOLIB_ENCODING_NRZ);
-//	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	uint8_t syncWord[]={	0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa	};
 	
 	state=radio.setSyncWord(syncWord, 8);
-//	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state=radio.setRxBandwidth(50.0);
-//	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 #ifndef ARDUINO_TBeam
-	pinMode(GREEN_LED,OUTPUT);
+	pinMode(USER_LED,OUTPUT);
 #endif
 	
 	setledoff();
@@ -387,11 +312,11 @@ void loop(void)
 	static int runmode=0;
 	static int configmode=0;
 	
-	if(millis()<(3*60*1000))
+	if((millis()-display_starttime)<DISPLAY_TIMEOUT)
 	{
-		static int displaylastupdate=0;
+		static int display_last_update=0;
 		
-		if(millis()>(displaylastupdate+DISPLAY_UPDATE_PERIOD))
+		if(millis()>(display_last_update+DISPLAY_UPDATE_PERIOD))
 		{
 			float batvolt=readbatteryvoltage();
 			
@@ -417,7 +342,7 @@ void loop(void)
 			
 			display.display(); 		
 		
-			displaylastupdate=millis();
+			display_last_update=millis();
 		}
 	}
 	else
@@ -582,7 +507,7 @@ void loop(void)
 		}
 		
 		if(		!configmode
-			&&	(millis()>(30*1000))	)
+			&&	(millis()>(CONFIG_MODE_TIMEOUT))	)
 		{
 			Serial.println("Exiting config mode");
 			runmode=1;
@@ -592,10 +517,8 @@ void loop(void)
 	{
 		static int lasttx=0;
 		
-#if !SLEEP_MODE_OPERATION
 		if(millis()>(lasttx+txperiod))
 		{
-#endif
 			uint8_t TxPacket[256];
 			int state;
 			
@@ -619,16 +542,24 @@ void loop(void)
 				else if(state==RADIOLIB_ERR_TX_TIMEOUT)			{	Serial.println(F("[SX1278] Timed out while transmitting!"));	}
 				else											{	Serial.println(F("[SX1278] Failed to transmit packet, code "));
 																	Serial.println(state);											}
-																	
 				
 				if(cnt!=(burstcount-1))
 					delay(100);
 			}
-#if !SLEEP_MODE_OPERATION
 		}
-#endif
+		
+		// check whether the user button has been pressed,
+		// if so turn the display back on for a while
+		
+		if(digitalRead(USER_BUTTON)==0)
+		{
+			Serial.println("Turning the display back on for a while ...");
+			display_starttime=millis();
+		}
+		
 #if SLEEP_MODE_OPERATION
-		esp_sleep_enable_timer_wakeup(txperiod*1000);
+		// sleep for 50ms
+		esp_sleep_enable_timer_wakeup(50000);
 		esp_light_sleep_start();
 #endif
 	}
