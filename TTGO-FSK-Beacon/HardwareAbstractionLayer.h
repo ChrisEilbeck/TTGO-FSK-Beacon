@@ -51,4 +51,3 @@
 	#define USER_BUTTON				-1
 	#define USER_LED				25
 #endif
-

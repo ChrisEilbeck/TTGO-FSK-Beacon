@@ -1,9 +1,10 @@
 #!/bin/bash
 
 VERBOSE=--verbose
+BOARD=esp32:esp32:ttgo-lora32:Revision=TTGO_LoRa32_v21new
 
 arduino-cli compile \
-	--fqbn esp32:esp32:ttgo-lora32-v21new \
+	--fqbn ${BOARD} \
 	${VERBOSE} \
 	TTGO-FSK-Beacon.ino
 

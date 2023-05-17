@@ -197,9 +197,14 @@ void setup(void)
 	Serial.begin(115200);
 	
 	Serial.println("\nPress the C key to stay in config mode, you have 30 seconds ...");
-	
+#ifndef ARDUINO_TBeam
+  pinMode(USER_LED,OUTPUT);
+#endif
+  
+  setledoff();
+  	
 	// initialize SX1278 FSK modem with default settings
-//	Serial.print(F("[SX1278] Initializing ... "));
+	Serial.print(F("[SX1278] Initializing ... "));
 	
 	int state=radio.beginFSK();
 	if(state==RADIOLIB_ERR_NONE)
@@ -210,7 +215,13 @@ void setup(void)
 	{
 		Serial.print(F("Radio module not found: failure code "));
 		Serial.println(state);
-		while (true);
+		while(true)
+   {
+      setledon();
+      delay(250);
+      setledoff();
+      delay(250);
+     }
 	}
 	
 	// SSD1306_SWITCHCAPVCC=generate display voltage from 3.3V internally
@@ -297,12 +308,6 @@ void setup(void)
 	
 	state=radio.setRxBandwidth(50.0);
 	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
-	
-#ifndef ARDUINO_TBeam
-	pinMode(USER_LED,OUTPUT);
-#endif
-	
-	setledoff();
 	
 	displaymenu();
 }
@@ -564,4 +569,3 @@ void loop(void)
 #endif
 	}
 }
-

@@ -1,7 +1,11 @@
 #!/bin/bash
 
-~/arduino-cli/arduino-cli upload \
- 	--port /dev/ttyACM1 \
-	--verbose \
-	--fqbn esp32:esp32:ttgo-lora32-v21new
+VERBOSE=--verbose
+PORT=/dev/ttyUSB*
+BOARD=esp32:esp32:ttgo-lora32:Revision=TTGO_LoRa32_v21new
+
+arduino-cli upload \
+ 	--port ${PORT} \
+	${VERBOSE} \
+	--fqbn ${BOARD}
 
