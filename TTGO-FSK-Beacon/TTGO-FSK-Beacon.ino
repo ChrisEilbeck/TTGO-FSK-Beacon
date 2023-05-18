@@ -27,29 +27,8 @@
 #define OLED_RESET     -1 
 Adafruit_SSD1306 display(SCREEN_WIDTH,SCREEN_HEIGHT,&Wire,OLED_RESET);
 
-#define LOGO_HEIGHT   16
-#define LOGO_WIDTH    16
-static const unsigned char PROGMEM logo_bmp[] =
-{
-	B00000000, B11000000,
-	B00000001, B11000000,
-	B00000001, B11000000,
-	B00000011, B11100000,
-	B11110011, B11100000,
-	B11111110, B11111000,
-	B01111110, B11111111,
-	B00110011, B10011111,
-	B00011111, B11111100,
-	B00001101, B01110000,
-	B00011011, B10100000,
-	B00111111, B11100000,
-	B00111111, B11110000,
-	B01111100, B11110000,
-	B01110000, B01110000,
-	B00000000, B00110000
-};
-
-SX1278 radio=new Module(LoRa_NSS,LoRa_DIO0,LoRa_RESET,LoRa_DIO1);
+//SX1278 radio=new Module(LORA_CS,LORA_IRQ,LORA_RST,LORA_D1);
+SX1276 radio=new Module(LORA_CS,LORA_IRQ,LORA_RST,LORA_D1);
 
 // set up some defaults in case we can't read the programmed values from the eeprom
 
@@ -71,12 +50,16 @@ int power_level=DEFAULT_POWER_LEVEL;
 
 int display_starttime=0;
 
+bool configmode=false;
+bool displayon=true;
+int displayonuntil=30000;	// on for 30s from boot
+
 void setledon(void)
 {
 #ifdef ARDUINO_TBeam
 	axp.setChgLEDMode(AXP20X_LED_LOW_LEVEL);
 #else
-	digitalWrite(USER_LED,HIGH);
+	digitalWrite(LED_BUILTIN,HIGH);
 #endif
 }
 
@@ -85,7 +68,7 @@ void setledoff(void)
 #ifdef ARDUINO_TBeam
 	axp.setChgLEDMode(AXP20X_LED_OFF);
 #else
-	digitalWrite(USER_LED,LOW);
+	digitalWrite(LED_BUILTIN,LOW);
 #endif
 }
 
@@ -141,16 +124,16 @@ void displaymenu(void)
 	Serial.print("\t0\t-\tRestore default frequency\r\n");
 	Serial.print("\t+/u/U\t-\tIncrease frequency in fine, coarse or very coarse steps\r\n");
 	Serial.print("\t-/d/D\t-\tDecrease frequency in fine, coarse or very coarse steps\r\n");
-	Serial.print("\t4-\t-Operate in 433MHz band\r\n");
-	Serial.print("\t8-\t-Operate in 868MHz band\r\n");
-	Serial.print("\t9-\t-Operate in 915MHz band\r\n");
+	Serial.print("\tf\t-\tDisplay the current frequency\r\n");
+	Serial.print("\t4\t-\tOperate in 433MHz band\r\n");
+	Serial.print("\t8\t-\tOperate in 868MHz band\r\n");
+	Serial.print("\t9\t-\tOperate in 915MHz band\r\n");
 	Serial.print("\to\t-\tRestore the default power level\r\n");
 	Serial.print("\tp\t-\tDecrease the power level\r\n");
 	Serial.print("\tP\t-\tIncrease the power level\r\n");
 	Serial.print("\tb\t-\tDisplay the battery voltage\r\n");
 	Serial.print("\tl/L\t-\tGreen LED on/off\r\n");
 	Serial.print("\tr\t-\tEnter run mode\r\n");
-	Serial.print("\tc\t-\tStay in config mode, don't exit to run mode\r\n");
 	Serial.print("\tm\t-\tRe-display this menu\r\n");
 	Serial.println();
 }
@@ -196,45 +179,66 @@ void setup(void)
 	
 	Serial.begin(115200);
 	
-	Serial.println("\nPress the C key to stay in config mode, you have 30 seconds ...");
-#ifndef ARDUINO_TBeam
-  pinMode(USER_LED,OUTPUT);
+#if 1
+	if(Serial)
+		configmode=true;
 #endif
-  
-  setledoff();
-  	
-	// initialize SX1278 FSK modem with default settings
-	Serial.print(F("[SX1278] Initializing ... "));
 	
-	int state=radio.beginFSK();
-	if(state==RADIOLIB_ERR_NONE)
-	{
-		Serial.println(F("Radio module configured"));
-	}
-	else 
-	{
-		Serial.print(F("Radio module not found: failure code "));
-		Serial.println(state);
-		while(true)
-   {
-      setledon();
-      delay(250);
-      setledoff();
-      delay(250);
-     }
-	}
+//	Serial.println("\nPress the C key to stay in config mode, you have 30 seconds ...");
+	
+#ifndef ARDUINO_TBeam
+	pinMode(LED_BUILTIN,OUTPUT);
+	
+	if(USER_BUTTON>=0)
+		pinMode(USER_BUTTON,INPUT_PULLUP);
+#endif
+	
+	setledoff();
 	
 	// SSD1306_SWITCHCAPVCC=generate display voltage from 3.3V internally
-	if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
+	if(!display.begin(SSD1306_SWITCHCAPVCC,0x3C))
 	{
 		Serial.println(F("SSD1306 allocation failed"));
 		for(;;); // Don't proceed, loop forever
 	}
 	
-	// Clear the buffer
+	// Clear the buffer and display a logo for 2 seconds
 	display.clearDisplay();
+	display.setTextColor(WHITE);
+	display.setTextSize(2);
+	display.setCursor(32,8);	display.print("TTGO");
+	display.setCursor(40,24);	display.print("FSK");
+	display.setCursor(18,40);	display.print("BEACON");
 	display.display();
-
+	delay(2000);
+	
+	// initialize SX1278 FSK modem with default settings
+	Serial.print("Radio initializing ... ");
+	
+	int state=radio.beginFSK();
+	if(state==RADIOLIB_ERR_NONE)
+	{
+		Serial.println("Radio module configured");
+	}
+	else 
+	{
+		Serial.print("Radio module not found: failure code ");
+		Serial.println(state);
+		
+		display.setTextColor(WHITE);
+		display.setTextSize(2);
+		display.setCursor(0,0);
+		display.print("Lora32\r\nError\r\n");
+		display.println(state);
+		
+		if(state==RADIOLIB_ERR_CHIP_NOT_FOUND)
+			display.print("Not found");
+		
+		display.display();
+		
+		while(true)	{	setledon();	delay(250);	setledoff();	delay(250);	}
+	}
+	
 #ifndef ADAFRUIT_FEATHER_M0
   	EEPROM.begin(EEPROM_SIZE);
 	
@@ -246,12 +250,12 @@ void setup(void)
 	buffer[2]=EEPROM.read(EEPROM_F3_ADDRESS);
 	buffer[3]=EEPROM.read(EEPROM_F4_ADDRESS);
 	
-#if 0
-	Serial.println(buffer[0],HEX);
-	Serial.println(buffer[1],HEX);
-	Serial.println(buffer[2],HEX);
-	Serial.println(buffer[3],HEX);
-#endif
+	#if 1
+		Serial.println(buffer[0],HEX);
+		Serial.println(buffer[1],HEX);
+		Serial.println(buffer[2],HEX);
+		Serial.println(buffer[3],HEX);
+	#endif
 	
 	memcpy((uint8_t *)&freqval,buffer,4);
 	
@@ -263,12 +267,23 @@ void setup(void)
 		max_frequency=MAX_FREQUENCY4;
 		Serial.println();
 	}
+	else
+		frequency=freqval;
+	
+	if(frequency<800.000)		{	min_frequency=MIN_FREQUENCY4;	max_frequency=MAX_FREQUENCY4;	default_frequency=DEFAULT_FREQUENCY4;	}
+	else if(frequency<900.000)	{	min_frequency=MIN_FREQUENCY8;	max_frequency=MAX_FREQUENCY8;	default_frequency=DEFAULT_FREQUENCY8;	}
+	else						{	min_frequency=MIN_FREQUENCY9;	max_frequency=MAX_FREQUENCY9;	default_frequency=DEFAULT_FREQUENCY9;	}
+	
 #else
 	frequency=DEFAULT_FREQUENCY;
+	min_frequency=MIN_FREQUENCY4;
+	max_frequency=MAX_FREQUENCY4;
+	default_frequency=DEFAULT_FREQUENCY4;
+#endif
+	
 	Serial.print("Frequency: ");
 	Serial.printf("%03.3f MHz",frequency);
 	Serial.println();
-#endif
 	
 #ifndef ADAFRUIT_FEATHER_M0
 	power_level=EEPROM.read(4);
@@ -276,48 +291,48 @@ void setup(void)
 	power_level=DEFAULT_POWER_LEVEL;
 #endif
 	
+	if(power_level>MAX_POWER_LEVEL)
+		power_level=MAX_POWER_LEVEL;
+	
 	Serial.print("Setting power level to ");
 	Serial.print(power_level);
 	Serial.println(" dBm");
 	
 	state=radio.setFrequency(frequency);
-	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Frequency Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state=radio.setBitRate(2.4);
-	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("BitRate Success ...");		}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state=radio.setFrequencyDeviation(10.0);
-	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Deviation Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state=radio.setOutputPower((float)power_level);
-	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("PowerLevel Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state=radio.setCurrentLimit(100);
-	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("CurrLimit Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state=radio.setDataShaping(RADIOLIB_SHAPING_0_5);
-	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Shaping Success ...");		}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state=radio.setEncoding(RADIOLIB_ENCODING_NRZ);
-	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Encoding Success ...");		}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	uint8_t syncWord[]={	0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa	};
 	
 	state=radio.setSyncWord(syncWord, 8);
-	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("SyncWord Success ...");		}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state=radio.setRxBandwidth(50.0);
-	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
+	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("ReceiveBW Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	displaymenu();
 }
 
 void loop(void)
 {
-	static int runmode=0;
-	static int configmode=0;
-	
-	if((millis()-display_starttime)<DISPLAY_TIMEOUT)
+	if(displayon)
 	{
 		static int display_last_update=0;
 		
@@ -326,29 +341,21 @@ void loop(void)
 			float batvolt=readbatteryvoltage();
 			
 			display.clearDisplay();
-			
 			display.setTextColor(WHITE);
 			
-			display.setTextSize(1);
-			display.setCursor(16,0);
-			display.print("Battery Voltage");
-			
-			display.setTextSize(2);
-			display.setCursor(24,12);
-			display.printf("%4.0fmV",batvolt);
-			
-			display.setTextSize(1);
-			display.setCursor(38,36);
-			display.print("Frequency");
-			
-			display.setTextSize(2);
-			display.setCursor(16,48);
-			display.printf("%3.3fM",frequency);
+			display.setTextSize(1);		display.setCursor(16,0);	display.print("Battery Voltage");
+			display.setTextSize(2);		display.setCursor(24,12);	display.printf("%4.0fmV",batvolt);
+			display.setTextSize(1);		display.setCursor(38,36);	display.print("Frequency");
+			display.setTextSize(2);		display.setCursor(16,48);	display.printf("%3.3fM",frequency);
 			
 			display.display(); 		
 		
 			display_last_update=millis();
 		}
+		
+		if(!configmode)
+			if(millis()>displayonuntil)
+				displayon=false;
 	}
 	else
 	{
@@ -358,166 +365,8 @@ void loop(void)
 		display.display(); 		
 	}
 	
-	if(!runmode)
-	{
-		int state;
-		static int highlow=0;
-		
-		if(Serial.available())
-		{
-			char byte=Serial.read();
-			
-			Serial.write(byte);
-			Serial.println();
-			
-			switch(byte)
-			{
-				case 't':
-				case 'T':	{
-								uint8_t TxPacket[256];
-								uint16_t TxPacketLength=32;
-								
-								memset(TxPacket,0xaa,256);
-								setledon();
-								state=radio.transmit(TxPacket,TxPacketLength);
-								setledoff();
-									
-								if(state==RADIOLIB_ERR_NONE)					
-								{
-//									Serial.println(F("[SX1278] Packet transmitted successfully!"));	
-								}
-								else if(state==RADIOLIB_ERR_PACKET_TOO_LONG)	{	Serial.println(F("[SX1278] Packet too long!"));					}
-								else if(state==RADIOLIB_ERR_TX_TIMEOUT)			{	Serial.println(F("[SX1278] Timed out while transmitting!"));	}
-								else											{	Serial.println(F("[SX1278] Failed to transmit packet, code "));
-																					Serial.println(state);											}
-							}
-							
-							break;
-				
-#ifndef ADAFRUIT_FEATHER_M0
-				// frequency adjustment commands
-				
-				case '0':	frequency=default_frequency;
-							update_frequency(frequency);
-							break;
-				
-				case '+':	if(frequency<max_frequency)	frequency+=FINE_STEP;
-							if(frequency>max_frequency)	frequency=max_frequency;
-							update_frequency(frequency);
-							break;
-				
-				case '-':	if(frequency>min_frequency)	frequency-=FINE_STEP;
-							if(frequency<min_frequency)	frequency=min_frequency;
-							update_frequency(frequency);
-							break;
-				
-				case 'u':	if(frequency<max_frequency)	frequency+=COARSE_STEP;
-							if(frequency>max_frequency)	frequency=max_frequency;
-							update_frequency(frequency);
-							break;
-							
-				case 'd':	if(frequency>min_frequency)	frequency-=COARSE_STEP;
-							if(frequency<min_frequency)	frequency=min_frequency;
-							update_frequency(frequency);
-							break;
-							
-				case 'U':	if(frequency<max_frequency)	frequency+=VERY_COARSE_STEP;
-							if(frequency>max_frequency)	frequency=max_frequency;
-							update_frequency(frequency);
-							break;
-							
-				case 'D':	if(frequency>min_frequency)	frequency-=VERY_COARSE_STEP;
-							if(frequency<min_frequency)	frequency=min_frequency;
-							update_frequency(frequency);
-							break;
-#endif
-				case '4':	Serial.println("Selecting operation in the 433MHz band");
-							frequency_band=4;
-							frequency=DEFAULT_FREQUENCY4;
-							min_frequency=MIN_FREQUENCY4;
-							max_frequency=MAX_FREQUENCY4;
-							update_frequency(frequency);
-							break;
-				
-				case '8':	Serial.println("Selecting operation in the 869MHz band");
-							frequency_band=8;
-							frequency=DEFAULT_FREQUENCY8;
-							min_frequency=MIN_FREQUENCY8;
-							max_frequency=MAX_FREQUENCY8;
-							update_frequency(frequency);
-							break;
-				
-				case '9':	Serial.println("Selecting operation in the 915MHz band");
-							frequency_band=9;
-							frequency=DEFAULT_FREQUENCY9;
-							min_frequency=MIN_FREQUENCY9;
-							max_frequency=MAX_FREQUENCY9;
-							update_frequency(frequency);
-							break;
-				
-				// power adjustment commands
-				
-				case 'p':	if(power_level>MIN_POWER_LEVEL)
-							{
-								power_level--;
-								update_power_level(power_level);
-							}
-							
-							break;
-							
-				case 'P':	if(power_level<MAX_POWER_LEVEL)
-							{
-								power_level++;
-								update_power_level(power_level);
-							}
-							
-							break;
-				
-				case 'o':	power_level=DEFAULT_POWER_LEVEL;
-							update_power_level(power_level);
-							
-							break;
-							
-				// misc features
-				
-				case 'b':	Serial.print("Battery voltage: ");
-							Serial.print(readbatteryvoltage());
-							Serial.println("mV");
-							break;
-				
-				case 'l':	setledon();
-							break;
-				
-				case 'L':	setledoff();
-							break;
-				
-				case 'r':
-				case 'R':	runmode=1;
-							Serial.println("Entering run mode");
-							break;
-				
-				case 'c':	configmode=!configmode;
-							if(configmode)	Serial.println("Entering config mode, will not go into run mode after 30 seconds operation");
-							else			Serial.println("Exiting config mode, will go into run mode after 30 seconds operation");
-							
-							break;
-				
-				case 'm':
-				case 'M':	displaymenu();
-							break;
-							
-				default:	// do nowt
-							break;
-			}
-		}
-		
-		if(		!configmode
-			&&	(millis()>(CONFIG_MODE_TIMEOUT))	)
-		{
-			Serial.println("Exiting config mode");
-			runmode=1;
-		}
-	}
+	if(configmode)
+		do_config_mode();
 	else
 	{
 		static int lasttx=0;
@@ -541,31 +390,221 @@ void loop(void)
 				
 				if(state==RADIOLIB_ERR_NONE)
 				{
-//					Serial.println(F("[SX1278] Packet transmitted successfully!"));	
+#if 0
+					Serial.println("[SX1278] Packet transmitted successfully!");
+#endif
 				}
-				else if(state==RADIOLIB_ERR_PACKET_TOO_LONG)	{	Serial.println(F("[SX1278] Packet too long!"));					}
-				else if(state==RADIOLIB_ERR_TX_TIMEOUT)			{	Serial.println(F("[SX1278] Timed out while transmitting!"));	}
-				else											{	Serial.println(F("[SX1278] Failed to transmit packet, code "));
-																	Serial.println(state);											}
+				else if(state==RADIOLIB_ERR_PACKET_TOO_LONG)	{	Serial.println("Radio packet too long!");					}
+				else if(state==RADIOLIB_ERR_TX_TIMEOUT)			{	Serial.println("Radio timed out while transmitting!");		}
+				else											{	Serial.println("Radio failed to transmit packet, code ");
+																	Serial.println(state);										}
 				
 				if(cnt!=(burstcount-1))
 					delay(100);
 			}
 		}
 		
-		// check whether the user button has been pressed,
-		// if so turn the display back on for a while
-		
-		if(digitalRead(USER_BUTTON)==0)
+		if(USER_BUTTON>=0)
 		{
-			Serial.println("Turning the display back on for a while ...");
-			display_starttime=millis();
+			static int last_user_button=0;
+			int user_button=digitalRead(USER_BUTTON);
+			
+			if(user_button&&!last_user_button)
+			{
+				Serial.print("Button pressed\r\n");
+				displayonuntil=millis()+30000;
+				displayon=true;
+			}
+			
+			last_user_button=user_button;
 		}
 		
-#if SLEEP_MODE_OPERATION
-		// sleep for 50ms
-		esp_sleep_enable_timer_wakeup(50000);
-		esp_light_sleep_start();
+		if(!displayon)
+		{
+			// sleep for 50ms
+			esp_sleep_enable_timer_wakeup(50000);
+			esp_light_sleep_start();
+		}
+	}
+}
+
+void do_config_mode(void)
+{
+	int state;
+	
+	if(!Serial)
+	{
+		display.clearDisplay();
+		display.setTextColor(WHITE);
+				
+		display.setTextSize(2);		display.setCursor(0,0);		display.print("Entering");
+									display.setCursor(0,16);	display.print("Normal");
+									display.setCursor(0,32);	display.print("Operating");
+									display.setCursor(0,48);	display.print("Mode");
+		
+		display.display();
+		
+		delay(2000);
+		
+		configmode=false;
+	}
+	
+	if(Serial.available())
+	{
+		char byte=Serial.read();
+		
+		Serial.write(byte);
+		Serial.println();
+		
+		switch(byte)
+		{
+			case 't':
+			case 'T':	{
+							uint8_t TxPacket[256];
+							uint16_t TxPacketLength=32;
+							
+							memset(TxPacket,0xaa,256);
+							setledon();
+							state=radio.transmit(TxPacket,TxPacketLength);
+							setledoff();
+								
+							if(state==RADIOLIB_ERR_NONE)					
+							{
+								Serial.println("Radio packet transmitted successfully!");	
+							}
+							else if(state==RADIOLIB_ERR_PACKET_TOO_LONG)	{	Serial.println("Radio packet too long!");					}
+							else if(state==RADIOLIB_ERR_TX_TIMEOUT)			{	Serial.println("Radio timed out while transmitting!");		}
+							else											{	Serial.println("Radio failed to transmit packet, code ");
+																				Serial.println(state);										}
+						}
+						
+						break;
+			
+#ifndef ADAFRUIT_FEATHER_M0
+			// frequency adjustment commands
+			
+			case '0':	frequency=default_frequency;
+						update_frequency(frequency);
+						break;
+			
+			case 'f':	update_frequency(frequency);
+						break;
+			
+			case '+':	if(frequency<max_frequency)	frequency+=FINE_STEP;
+						if(frequency>max_frequency)	frequency=max_frequency;
+						update_frequency(frequency);
+						break;
+			
+			case '-':	if(frequency>min_frequency)	frequency-=FINE_STEP;
+						if(frequency<min_frequency)	frequency=min_frequency;
+						update_frequency(frequency);
+						break;
+			
+			case 'u':	if(frequency<max_frequency)	frequency+=COARSE_STEP;
+						if(frequency>max_frequency)	frequency=max_frequency;
+						update_frequency(frequency);
+						break;
+						
+			case 'd':	if(frequency>min_frequency)	frequency-=COARSE_STEP;
+						if(frequency<min_frequency)	frequency=min_frequency;
+						update_frequency(frequency);
+						break;
+						
+			case 'U':	if(frequency<max_frequency)	frequency+=VERY_COARSE_STEP;
+						if(frequency>max_frequency)	frequency=max_frequency;
+						update_frequency(frequency);
+						break;
+						
+			case 'D':	if(frequency>min_frequency)	frequency-=VERY_COARSE_STEP;
+						if(frequency<min_frequency)	frequency=min_frequency;
+						update_frequency(frequency);
+						break;
 #endif
+			
+			case '4':	Serial.println("Selecting operation in the 433MHz band");
+						frequency_band=4;
+						frequency=DEFAULT_FREQUENCY4;
+						min_frequency=MIN_FREQUENCY4;
+						max_frequency=MAX_FREQUENCY4;
+						default_frequency=DEFAULT_FREQUENCY4;
+						update_frequency(frequency);
+						break;
+			
+			case '8':	Serial.println("Selecting operation in the 869MHz band");
+						frequency_band=8;
+						frequency=DEFAULT_FREQUENCY8;
+						min_frequency=MIN_FREQUENCY8;
+						max_frequency=MAX_FREQUENCY8;
+						default_frequency=DEFAULT_FREQUENCY8;
+						update_frequency(frequency);
+						break;
+			
+			case '9':	Serial.println("Selecting operation in the 915MHz band");
+						frequency_band=9;
+						frequency=DEFAULT_FREQUENCY9;
+						min_frequency=MIN_FREQUENCY9;
+						max_frequency=MAX_FREQUENCY9;
+						default_frequency=DEFAULT_FREQUENCY9;
+						update_frequency(frequency);
+						break;
+			
+			// power adjustment commands
+			
+			case 'p':	if(power_level>MIN_POWER_LEVEL)
+						{
+							power_level--;
+							update_power_level(power_level);
+						}
+						
+						break;
+						
+			case 'P':	if(power_level<MAX_POWER_LEVEL)
+						{
+							power_level++;
+							update_power_level(power_level);
+						}
+						
+						break;
+			
+			case 'o':	power_level=DEFAULT_POWER_LEVEL;
+						update_power_level(power_level);
+						
+						break;
+						
+			// misc features
+			
+			case 'b':	Serial.print("Battery voltage: ");
+						Serial.print(readbatteryvoltage());
+						Serial.println("mV");
+						break;
+			
+			case 'l':	setledon();
+						break;
+			
+			case 'L':	setledoff();
+						break;
+			
+			case 'r':
+			case 'R':	configmode=false;
+						Serial.println("Entering run mode");
+						displayon=true;
+						displayonuntil=millis()+30000;
+						break;
+			
+#if 0
+			case 'c':	configmode=!configmode;
+						if(configmode)	Serial.println("Entering config mode, will not go into run mode after 30 seconds operation");
+						else			Serial.println("Exiting config mode, will go into run mode after 30 seconds operation");
+						
+						break;
+#endif
+			
+			case 'm':
+			case 'M':	displaymenu();
+						break;
+						
+			default:	// do nowt
+						break;
+		}
 	}
 }
