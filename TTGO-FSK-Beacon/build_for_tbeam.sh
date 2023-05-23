@@ -1,9 +1,9 @@
 #!/bin/bash
 
 VERBOSE=--verbose
+BOARD=esp32:esp32:tbeam
 
 arduino-cli compile \
-	--fqbn esp32:esp32:t-beam \
+	--fqbn ${BOARD} \
 	${VERBOSE} \
 	TTGO-FSK-Beacon.ino
-

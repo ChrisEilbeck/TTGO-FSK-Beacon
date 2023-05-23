@@ -21,7 +21,7 @@
 #define COARSE_STEP					0.005
 #define VERY_COARSE_STEP			0.100
 
-#define EEPROM_SIZE 				8
+#define EEPROM_SIZE 				32
 
 #define EEPROM_F1_ADDRESS			0x00
 #define EEPROM_F2_ADDRESS			0x01
@@ -29,6 +29,8 @@
 #define EEPROM_F4_ADDRESS			0x03
 
 #define EEPROM_POWER_LEVEL_ADDRESS	0x04
+
+#define EEPROM_PRESET_ADDRESS		0x08
 
 #define CONFIG_MODE_TIMEOUT			(30*1000)
 

@@ -1,5 +1,5 @@
 
-#define SLEEP_MODE_OPERATION	1
+#define USE_WEBSERVER_CONFIG	0
 
 #ifdef ARDUINO_TBeam
 	#include <axp20x.h>
@@ -131,7 +131,9 @@ void displaymenu(void)
 	Serial.print("\to\t-\tRestore the default power level\r\n");
 	Serial.print("\tp\t-\tDecrease the power level\r\n");
 	Serial.print("\tP\t-\tIncrease the power level\r\n");
-	Serial.print("\tb\t-\tDisplay the battery voltage\r\n");
+	Serial.print("\ta|b|c\t-\tRecall stored frequency settings\r\n");
+	Serial.print("\tA|B|C\t-\tStore frequency settings preset\r\n");
+	Serial.print("\tv\t-\tDisplay the battery voltage\r\n");
 	Serial.print("\tl/L\t-\tGreen LED on/off\r\n");
 	Serial.print("\tr\t-\tEnter run mode\r\n");
 	Serial.print("\tm\t-\tRe-display this menu\r\n");
@@ -183,8 +185,6 @@ void setup(void)
 	if(Serial)
 		configmode=true;
 #endif
-	
-//	Serial.println("\nPress the C key to stay in config mode, you have 30 seconds ...");
 	
 #ifndef ARDUINO_TBeam
 	pinMode(LED_BUILTIN,OUTPUT);
@@ -286,7 +286,7 @@ void setup(void)
 	Serial.println();
 	
 #ifndef ADAFRUIT_FEATHER_M0
-	power_level=EEPROM.read(4);
+	power_level=EEPROM.read(EEPROM_POWER_LEVEL_ADDRESS);
 #else
 	power_level=DEFAULT_POWER_LEVEL;
 #endif
@@ -328,10 +328,24 @@ void setup(void)
 	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("ReceiveBW Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	displaymenu();
+	
+	if(USE_WEBSERVER_CONFIG)	SetupWebServer();
 }
 
 void loop(void)
 {
+#if 0
+	while(1)
+	{
+		int rssi=radio.getRSSI(NULL,false);
+		Serial.println(rssi);
+		
+		delay(200);
+	}
+#endif
+	
+	if(USE_WEBSERVER_CONFIG)	PollWebServer();
+	
 	if(displayon)
 	{
 		static int display_last_update=0;
@@ -573,7 +587,7 @@ void do_config_mode(void)
 						
 			// misc features
 			
-			case 'b':	Serial.print("Battery voltage: ");
+			case 'v':	Serial.print("Battery voltage: ");
 						Serial.print(readbatteryvoltage());
 						Serial.println("mV");
 						break;
@@ -591,16 +605,32 @@ void do_config_mode(void)
 						displayonuntil=millis()+30000;
 						break;
 			
-#if 0
-			case 'c':	configmode=!configmode;
-						if(configmode)	Serial.println("Entering config mode, will not go into run mode after 30 seconds operation");
-						else			Serial.println("Exiting config mode, will go into run mode after 30 seconds operation");
-						
+			case 'a':
+			case 'b':
+			case 'c':	ReadStoredFrequencyPreset(byte-'a');
 						break;
-#endif
+			
+			case 'A':
+			case 'B':
+			case 'C':	SaveStoredFrequencyPreset(byte-'A');
+						break;
 			
 			case 'm':
 			case 'M':	displaymenu();
+						break;
+			
+			case 'x':	{
+							int cnt;
+							for(cnt=0;cnt<32;cnt++)
+							{
+								if(cnt==16)	Serial.print("\r\n");
+								
+								Serial.printf("%02x ",EEPROM.read(cnt));
+							}
+							
+							Serial.print("\r\n");
+						}
+						
 						break;
 						
 			default:	// do nowt
@@ -608,3 +638,66 @@ void do_config_mode(void)
 		}
 	}
 }
+
+void SaveStoredFrequencyPreset(int preset)
+{
+	uint8_t buffer[4];
+	memcpy(buffer,(uint8_t *)&frequency,4);
+	
+	#if 1
+		Serial.println(buffer[0],HEX);
+		Serial.println(buffer[1],HEX);
+		Serial.println(buffer[2],HEX);
+		Serial.println(buffer[3],HEX);
+	#endif
+	
+	EEPROM.write(EEPROM_PRESET_ADDRESS+4*preset+0,buffer[0]);
+	EEPROM.write(EEPROM_PRESET_ADDRESS+4*preset+1,buffer[1]);
+	EEPROM.write(EEPROM_PRESET_ADDRESS+4*preset+2,buffer[2]);
+	EEPROM.write(EEPROM_PRESET_ADDRESS+4*preset+3,buffer[3]);
+
+	EEPROM.commit();
+	
+	Serial.printf("Stored frequency of %03.3f MHz to Preset %c\r\n",frequency,'A'+preset);
+}
+
+void ReadStoredFrequencyPreset(int preset)
+{
+	float freqval;
+
+	char buffer[4];
+	
+	buffer[0]=EEPROM.read(EEPROM_PRESET_ADDRESS+4*preset+0);
+	buffer[1]=EEPROM.read(EEPROM_PRESET_ADDRESS+4*preset+1);
+	buffer[2]=EEPROM.read(EEPROM_PRESET_ADDRESS+4*preset+2);
+	buffer[3]=EEPROM.read(EEPROM_PRESET_ADDRESS+4*preset+3);
+	
+	#if 1
+		Serial.println(buffer[0],HEX);
+		Serial.println(buffer[1],HEX);
+		Serial.println(buffer[2],HEX);
+		Serial.println(buffer[3],HEX);
+	#endif
+	
+	memcpy((uint8_t *)&freqval,buffer,4);
+	
+	if(isnan(freqval))
+	{
+		Serial.println("Stored frequency is invalid, subsituting the default");
+		frequency=DEFAULT_FREQUENCY4;
+		min_frequency=MIN_FREQUENCY4;
+		max_frequency=MAX_FREQUENCY4;
+		Serial.println();
+	}
+	else
+	{
+		frequency=freqval;
+		Serial.printf("Recalled frequency of %03.3f MHz to Preset %c\r\n",frequency,'A'+preset);
+	}
+	
+	if(frequency<800.000)		{	min_frequency=MIN_FREQUENCY4;	max_frequency=MAX_FREQUENCY4;	default_frequency=DEFAULT_FREQUENCY4;	}
+	else if(frequency<900.000)	{	min_frequency=MIN_FREQUENCY8;	max_frequency=MAX_FREQUENCY8;	default_frequency=DEFAULT_FREQUENCY8;	}
+	else						{	min_frequency=MIN_FREQUENCY9;	max_frequency=MAX_FREQUENCY9;	default_frequency=DEFAULT_FREQUENCY9;	}
+	
+}
+
