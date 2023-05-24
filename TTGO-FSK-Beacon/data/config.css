@@ -1,0 +1,24 @@
+
+.frequencytable
+{
+	font-size: 40px;
+}
+
+.presettable
+{
+	width: 75%;
+}
+
+#updatefrequency
+{
+	width: 75%;
+	font-size: 24px;
+	pady: 20px;
+}
+
+#recallA,#recallB,#recallC,#storeA,#storeB,#storeC
+{
+	width: 100%;
+}
+
+
