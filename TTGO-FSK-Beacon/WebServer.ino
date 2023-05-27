@@ -1,64 +1,61 @@
+
 #include <WiFi.h>
 #include <DNSServer.h>
+#include <ESPAsyncWebServer.h>
+#include <SPIFFS.h>
 
-const byte DNS_PORT = 53;
+const byte DNS_PORT=53;
 IPAddress apIP(8,8,4,4); // The default android DNS
 DNSServer dnsServer;
-WiFiServer server(80);
 
-String responseHTML = ""
-  "<!DOCTYPE html><html><head><title>CaptivePortal</title></head><body>"
-  "<h1>Hello World!</h1><p>This is a captive portal example. All requests will "
-  "be redirected here.</p></body></html>";
+AsyncWebServer server(80);
+
+const char *password="marsflightcrew";
 
 void SetupWebServer(void)
 { 
 	WiFi.mode(WIFI_AP);
-	WiFi.softAP("TTGO-FSK-BEACON");
-	WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
+	WiFi.softAP("TTGO-FSK-BEACON",password);
+	WiFi.softAPConfig(apIP,apIP,IPAddress(255,255,255,0));
 	
 	// if DNSServer is started with "*" for domain name, it will reply with
 	// provided IP to all DNS request
-	dnsServer.start(DNS_PORT, "*", apIP);
+	dnsServer.start(DNS_PORT,"*",apIP);
 	
 	server.begin();
+
+	server.on("/",HTTP_GET,[](AsyncWebServerRequest *request)
+	{
+		Serial.print("Redirecting to config.html\r\n");
+		request->redirect("/config.html");
+	});	
+	
+	server.on("/config.html",HTTP_GET,[](AsyncWebServerRequest *request)
+	{
+		Serial.println("Returning /config.html");
+		request->send(SPIFFS,"/config.html");
+	});	
+	
+	server.on("/config.css",HTTP_GET,[](AsyncWebServerRequest *request)
+	{
+		Serial.println("Returning /config.css");
+		request->send(SPIFFS,"/config.css");
+	});	
+	
+	server.on("/config.js",HTTP_GET,[](AsyncWebServerRequest *request)
+	{
+		Serial.println("Returning /config.js");
+		request->send(SPIFFS,"/config.js");
+	});
+	
+	server.on("/heartbeat.html",HTTP_GET,[](AsyncWebServerRequest *request)
+	{
+		Serial.println("Returning /heartbeat.html");
+		request->send(SPIFFS,"/heartbeat.html");
+	});	
 }
 
 void PollWebServer(void)
 {
 	dnsServer.processNextRequest();
-	WiFiClient client=server.available();   // listen for incoming clients
-	
-	if(client)
-	{
-		String currentLine = "";
-		while (client.connected())
-		{
-			if (client.available())
-			{
-				char c = client.read();
-				if (c == '\n')
-				{
-					if (currentLine.length() == 0)
-					{
-						client.println("HTTP/1.1 200 OK");
-						client.println("Content-type:text/html");
-						client.println();
-						client.print(responseHTML);
-						break;
-					} 
-					else
-					{
-					currentLine = "";
-					}
-				} 
-				else if (c != '\r') 
-				{
-					currentLine += c;
-				}
-			}
-		}
-		
-		client.stop();
-	}
 }

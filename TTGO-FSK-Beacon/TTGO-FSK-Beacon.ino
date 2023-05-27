@@ -1,6 +1,4 @@
 
-#define USE_WEBSERVER_CONFIG	0
-
 #ifdef ARDUINO_TBeam
 	#include <axp20x.h>
 	AXP20X_Class axp;
@@ -14,6 +12,8 @@
 #include <RadioLib.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+
+#include "SPIFFS.h"
 
 #include "DefaultValues.h"
 #include "HardwareAbstractionLayer.h"
@@ -329,7 +329,11 @@ void setup(void)
 	
 	displaymenu();
 	
-	if(USE_WEBSERVER_CONFIG)	SetupWebServer();
+	SetupSPIFFS();
+	
+#if 1
+	SetupWebServer();
+#endif
 }
 
 void loop(void)
@@ -343,8 +347,9 @@ void loop(void)
 		delay(200);
 	}
 #endif
-	
-	if(USE_WEBSERVER_CONFIG)	PollWebServer();
+#if 1
+	PollWebServer();
+#endif
 	
 	if(displayon)
 	{
