@@ -1,4 +1,14 @@
 
+/*
+ * Extended life mode, enable and active flags, switches from two 
+ * transmit bursts at configured power and cadent to one transmit 
+ * burst at full power every 5 seconds.
+ * 
+ * Add cadence setting to test harness, add support to the scheduler for this
+ * 
+ * Integrate the web config interface
+ */
+
 #ifdef ARDUINO_TBeam
 	#include <axp20x.h>
 	AXP20X_Class axp;
@@ -17,7 +27,8 @@
 
 #include "DefaultValues.h"
 #include "HardwareAbstractionLayer.h"
-
+#include "TTGO-FSK-Beacon.h"
+	
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 
@@ -27,13 +38,20 @@
 #define OLED_RESET     -1 
 Adafruit_SSD1306 display(SCREEN_WIDTH,SCREEN_HEIGHT,&Wire,OLED_RESET);
 
-//SX1278 radio=new Module(LORA_CS,LORA_IRQ,LORA_RST,LORA_D1);
 SX1276 radio=new Module(LORA_CS,LORA_IRQ,LORA_RST,LORA_D1);
+
+// settings for the current radio configuration
+
+channel_settings current;
+
+// extended life mode flags
+
+bool extended_life_mode_active=false;
 
 // set up some defaults in case we can't read the programmed values from the eeprom
 
-int frequency_band=4;
-float frequency=DEFAULT_FREQUENCY4;
+//int frequency_band=4;
+//float frequency=DEFAULT_FREQUENCY4;
 
 int old_frequency_band=4;
 float old_frequency=DEFAULT_FREQUENCY4;
@@ -44,9 +62,9 @@ float max_frequency=MAX_FREQUENCY4;
 
 // time between transmissions
 
-int txperiod=2000;
+//int txperiod=2000;
 
-int power_level=DEFAULT_POWER_LEVEL;
+//int power_level=DEFAULT_POWER_LEVEL;
 
 int display_starttime=0;
 
@@ -92,13 +110,7 @@ void update_frequency(float freq)
 	int state=radio.setFrequency(freq);
 	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
-#ifndef ADAFRUIT_FEATHER_M0
-	uint8_t buffer[4];
-	memcpy(buffer,(uint8_t *)&freq,4);
-	
-	EEPROM.write(EEPROM_F1_ADDRESS,buffer[0]);	EEPROM.write(EEPROM_F2_ADDRESS,buffer[1]);	EEPROM.write(EEPROM_F3_ADDRESS,buffer[2]);	EEPROM.write(EEPROM_F4_ADDRESS,buffer[3]);
-	EEPROM.commit();
-#endif
+	SaveStoredFrequencyPreset(0);	
 }
 
 void update_power_level(int power_level)
@@ -110,10 +122,7 @@ void update_power_level(int power_level)
 	int state=radio.setOutputPower((float)power_level);
 	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
-#ifndef ADAFRUIT_FEATHER_M0
-	EEPROM.write(EEPROM_POWER_LEVEL_ADDRESS,power_level);
-	EEPROM.commit();
-#endif
+	SaveStoredFrequencyPreset(0);	
 }
 
 void displaymenu(void)
@@ -240,65 +249,28 @@ void setup(void)
 	}
 	
 #ifndef ADAFRUIT_FEATHER_M0
-  	EEPROM.begin(EEPROM_SIZE);
-	
-	uint8_t buffer[4];
-	float freqval;
-	
-	buffer[0]=EEPROM.read(EEPROM_F1_ADDRESS);
-	buffer[1]=EEPROM.read(EEPROM_F2_ADDRESS);
-	buffer[2]=EEPROM.read(EEPROM_F3_ADDRESS);
-	buffer[3]=EEPROM.read(EEPROM_F4_ADDRESS);
-	
-	#if 1
-		Serial.println(buffer[0],HEX);
-		Serial.println(buffer[1],HEX);
-		Serial.println(buffer[2],HEX);
-		Serial.println(buffer[3],HEX);
-	#endif
-	
-	memcpy((uint8_t *)&freqval,buffer,4);
-	
-	if(isnan(freqval))
-	{
-		Serial.println("Stored frequency is invalid, subsituting the default");
-		frequency=DEFAULT_FREQUENCY4;
-		min_frequency=MIN_FREQUENCY4;
-		max_frequency=MAX_FREQUENCY4;
-		Serial.println();
-	}
-	else
-		frequency=freqval;
-	
-	if(frequency<800.000)		{	min_frequency=MIN_FREQUENCY4;	max_frequency=MAX_FREQUENCY4;	default_frequency=DEFAULT_FREQUENCY4;	}
-	else if(frequency<900.000)	{	min_frequency=MIN_FREQUENCY8;	max_frequency=MAX_FREQUENCY8;	default_frequency=DEFAULT_FREQUENCY8;	}
-	else						{	min_frequency=MIN_FREQUENCY9;	max_frequency=MAX_FREQUENCY9;	default_frequency=DEFAULT_FREQUENCY9;	}
-	
+	EEPROM.begin(EEPROM_SIZE);
+	ReadStoredFrequencyPreset(0);
 #else
-	frequency=DEFAULT_FREQUENCY;
+	current.frequency=DEFAULT_FREQUENCY;
 	min_frequency=MIN_FREQUENCY4;
 	max_frequency=MAX_FREQUENCY4;
 	default_frequency=DEFAULT_FREQUENCY4;
 #endif
 	
-	Serial.print("Frequency: ");
-	Serial.printf("%03.3f MHz",frequency);
-	Serial.println();
+	Serial.printf("Frequency: %03.3f MHz\r\n",current.frequency);
 	
 #ifndef ADAFRUIT_FEATHER_M0
-	power_level=EEPROM.read(EEPROM_POWER_LEVEL_ADDRESS);
 #else
-	power_level=DEFAULT_POWER_LEVEL;
+	current.power_level=DEFAULT_POWER_LEVEL;
 #endif
 	
-	if(power_level>MAX_POWER_LEVEL)
-		power_level=MAX_POWER_LEVEL;
+	if(current.power_level>MAX_POWER_LEVEL)
+		current.power_level=MAX_POWER_LEVEL;
 	
-	Serial.print("Setting power level to ");
-	Serial.print(power_level);
-	Serial.println(" dBm");
+	Serial.printf("Setting power level to %d dBm\r\n",current.power_level);
 	
-	state=radio.setFrequency(frequency);
+	state=radio.setFrequency(current.frequency);
 	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Frequency Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state=radio.setBitRate(2.4);
@@ -307,7 +279,7 @@ void setup(void)
 	state=radio.setFrequencyDeviation(10.0);
 	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("Deviation Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
-	state=radio.setOutputPower((float)power_level);
+	state=radio.setOutputPower((float)current.power_level);
 	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("PowerLevel Success ...");	}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state=radio.setCurrentLimit(100);
@@ -321,7 +293,7 @@ void setup(void)
 	
 	uint8_t syncWord[]={	0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa,0xaa	};
 	
-	state=radio.setSyncWord(syncWord, 8);
+	state=radio.setSyncWord(syncWord,8);
 	if(state==RADIOLIB_ERR_NONE)	{	Serial.println("SyncWord Success ...");		}	else	{	Serial.print(F("failed, code "));	Serial.println(state);	}
 	
 	state=radio.setRxBandwidth(50.0);
@@ -330,10 +302,7 @@ void setup(void)
 	displaymenu();
 	
 	SetupSPIFFS();
-	
-#if 1
 	SetupWebServer();
-#endif
 }
 
 void loop(void)
@@ -347,9 +316,8 @@ void loop(void)
 		delay(200);
 	}
 #endif
-#if 1
+	
 	PollWebServer();
-#endif
 	
 	if(displayon)
 	{
@@ -365,7 +333,7 @@ void loop(void)
 			display.setTextSize(1);		display.setCursor(16,0);	display.print("Battery Voltage");
 			display.setTextSize(2);		display.setCursor(24,12);	display.printf("%4.0fmV",batvolt);
 			display.setTextSize(1);		display.setCursor(38,36);	display.print("Frequency");
-			display.setTextSize(2);		display.setCursor(16,48);	display.printf("%3.3fM",frequency);
+			display.setTextSize(2);		display.setCursor(16,48);	display.printf("%3.3fM",current.frequency);
 			
 			display.display(); 		
 		
@@ -381,7 +349,7 @@ void loop(void)
 		// turn the display off and everything else other than the radio that we can
 		
 		display.clearDisplay();
-		display.display(); 		
+		display.display();
 	}
 	
 	if(configmode)
@@ -390,7 +358,7 @@ void loop(void)
 	{
 		static int lasttx=0;
 		
-		if(millis()>(lasttx+txperiod))
+		if(millis()>(lasttx+current.tx_period*MS_PER_TICK))
 		{
 			uint8_t TxPacket[256];
 			int state;
@@ -420,6 +388,19 @@ void loop(void)
 				
 				if(cnt!=(burstcount-1))
 					delay(100);
+			}
+		}
+		
+		if(current.use_extended_life_mode)
+		{
+			if(millis()>15*1000*60)
+			{
+				// after 15 minutes of operation, switch power to 
+				// maximum and reduce cadence to one transmission 
+				// every 5 seconds
+				
+				radio.setOutputPower(MAX_POWER_LEVEL);
+				current.tx_period=100;	// 100 periods of 50ms
 			}
 		}
 		
@@ -502,91 +483,91 @@ void do_config_mode(void)
 #ifndef ADAFRUIT_FEATHER_M0
 			// frequency adjustment commands
 			
-			case '0':	frequency=default_frequency;
-						update_frequency(frequency);
+			case '0':	current.frequency=default_frequency;
+						update_frequency(current.frequency);
 						break;
 			
-			case 'f':	update_frequency(frequency);
+			case 'f':	update_frequency(current.frequency);
 						break;
 			
-			case '+':	if(frequency<max_frequency)	frequency+=FINE_STEP;
-						if(frequency>max_frequency)	frequency=max_frequency;
-						update_frequency(frequency);
+			case '+':	if(current.frequency<max_frequency)	current.frequency+=FINE_STEP;
+						if(current.frequency>max_frequency)	current.frequency=max_frequency;
+						update_frequency(current.frequency);
 						break;
 			
-			case '-':	if(frequency>min_frequency)	frequency-=FINE_STEP;
-						if(frequency<min_frequency)	frequency=min_frequency;
-						update_frequency(frequency);
+			case '-':	if(current.frequency>min_frequency)	current.frequency-=FINE_STEP;
+						if(current.frequency<min_frequency)	current.frequency=min_frequency;
+						update_frequency(current.frequency);
 						break;
 			
-			case 'u':	if(frequency<max_frequency)	frequency+=COARSE_STEP;
-						if(frequency>max_frequency)	frequency=max_frequency;
-						update_frequency(frequency);
+			case 'u':	if(current.frequency<max_frequency)	current.frequency+=COARSE_STEP;
+						if(current.frequency>max_frequency)	current.frequency=max_frequency;
+						update_frequency(current.frequency);
 						break;
 						
-			case 'd':	if(frequency>min_frequency)	frequency-=COARSE_STEP;
-						if(frequency<min_frequency)	frequency=min_frequency;
-						update_frequency(frequency);
+			case 'd':	if(current.frequency>min_frequency)	current.frequency-=COARSE_STEP;
+						if(current.frequency<min_frequency)	current.frequency=min_frequency;
+						update_frequency(current.frequency);
 						break;
 						
-			case 'U':	if(frequency<max_frequency)	frequency+=VERY_COARSE_STEP;
-						if(frequency>max_frequency)	frequency=max_frequency;
-						update_frequency(frequency);
+			case 'U':	if(current.frequency<max_frequency)	current.frequency+=VERY_COARSE_STEP;
+						if(current.frequency>max_frequency)	current.frequency=max_frequency;
+						update_frequency(current.frequency);
 						break;
 						
-			case 'D':	if(frequency>min_frequency)	frequency-=VERY_COARSE_STEP;
-						if(frequency<min_frequency)	frequency=min_frequency;
-						update_frequency(frequency);
+			case 'D':	if(current.frequency>min_frequency)	current.frequency-=VERY_COARSE_STEP;
+						if(current.frequency<min_frequency)	current.frequency=min_frequency;
+						update_frequency(current.frequency);
 						break;
 #endif
 			
 			case '4':	Serial.println("Selecting operation in the 433MHz band");
-						frequency_band=4;
-						frequency=DEFAULT_FREQUENCY4;
+						current.frequency=DEFAULT_FREQUENCY4;
+						current.frequency_band=4;
 						min_frequency=MIN_FREQUENCY4;
 						max_frequency=MAX_FREQUENCY4;
 						default_frequency=DEFAULT_FREQUENCY4;
-						update_frequency(frequency);
+						update_frequency(current.frequency);
 						break;
 			
 			case '8':	Serial.println("Selecting operation in the 869MHz band");
-						frequency_band=8;
-						frequency=DEFAULT_FREQUENCY8;
+						current.frequency=DEFAULT_FREQUENCY8;
+						current.frequency_band=8;
 						min_frequency=MIN_FREQUENCY8;
 						max_frequency=MAX_FREQUENCY8;
 						default_frequency=DEFAULT_FREQUENCY8;
-						update_frequency(frequency);
+						update_frequency(current.frequency);
 						break;
 			
 			case '9':	Serial.println("Selecting operation in the 915MHz band");
-						frequency_band=9;
-						frequency=DEFAULT_FREQUENCY9;
+						current.frequency=DEFAULT_FREQUENCY9;
+						current.frequency_band=9;
 						min_frequency=MIN_FREQUENCY9;
 						max_frequency=MAX_FREQUENCY9;
 						default_frequency=DEFAULT_FREQUENCY9;
-						update_frequency(frequency);
+						update_frequency(current.frequency);
 						break;
 			
 			// power adjustment commands
 			
-			case 'p':	if(power_level>MIN_POWER_LEVEL)
+			case 'p':	if(current.power_level>MIN_POWER_LEVEL)
 						{
-							power_level--;
-							update_power_level(power_level);
+							current.power_level--;
+							update_power_level(current.power_level);
 						}
 						
 						break;
 						
-			case 'P':	if(power_level<MAX_POWER_LEVEL)
+			case 'P':	if(current.power_level<MAX_POWER_LEVEL)
 						{
-							power_level++;
-							update_power_level(power_level);
+							current.power_level++;
+							update_power_level(current.power_level);
 						}
 						
 						break;
 			
-			case 'o':	power_level=DEFAULT_POWER_LEVEL;
-						update_power_level(power_level);
+			case 'o':	current.power_level=DEFAULT_POWER_LEVEL;
+						update_power_level(current.power_level);
 						
 						break;
 						
@@ -612,19 +593,21 @@ void do_config_mode(void)
 			
 			case 'a':
 			case 'b':
-			case 'c':	ReadStoredFrequencyPreset(byte-'a');
+			case 'c':	ReadStoredFrequencyPreset(byte-'a'+1);
 						break;
 			
 			case 'A':
 			case 'B':
-			case 'C':	SaveStoredFrequencyPreset(byte-'A');
+			case 'C':	SaveStoredFrequencyPreset(byte-'A'+1);
 						break;
 			
 			case 'm':
 			case 'M':	displaymenu();
 						break;
 			
-			case 'x':	{
+			case 'x':	// hexdump of the eeprom for debugging
+						
+						{
 							int cnt;
 							for(cnt=0;cnt<32;cnt++)
 							{
@@ -644,65 +627,89 @@ void do_config_mode(void)
 	}
 }
 
+// 0 is the defaults, 1, 2 and 3 correspond to saved presets
+
 void SaveStoredFrequencyPreset(int preset)
 {
-	uint8_t buffer[4];
-	memcpy(buffer,(uint8_t *)&frequency,4);
+	EEPROM.writeFloat(EEPROM_ADDRESS+sizeof(channel_settings)*preset+0,current.frequency);
+	EEPROM.writeByte(EEPROM_ADDRESS+sizeof(channel_settings)*preset+4,current.power_level);
+	EEPROM.writeByte(EEPROM_ADDRESS+sizeof(channel_settings)*preset+5,current.tx_period);
+	EEPROM.writeByte(EEPROM_ADDRESS+sizeof(channel_settings)*preset+6,current.use_extended_life_mode);
+	EEPROM.writeByte(EEPROM_ADDRESS+sizeof(channel_settings)*preset+7,current.frequency_band);
 	
-	#if 1
-		Serial.println(buffer[0],HEX);
-		Serial.println(buffer[1],HEX);
-		Serial.println(buffer[2],HEX);
-		Serial.println(buffer[3],HEX);
-	#endif
-	
-	EEPROM.write(EEPROM_PRESET_ADDRESS+4*preset+0,buffer[0]);
-	EEPROM.write(EEPROM_PRESET_ADDRESS+4*preset+1,buffer[1]);
-	EEPROM.write(EEPROM_PRESET_ADDRESS+4*preset+2,buffer[2]);
-	EEPROM.write(EEPROM_PRESET_ADDRESS+4*preset+3,buffer[3]);
-
 	EEPROM.commit();
 	
-	Serial.printf("Stored frequency of %03.3f MHz to Preset %c\r\n",frequency,'A'+preset);
+#if 1
+	char buffer[8];
+	EEPROM.readBytes(EEPROM_ADDRESS+sizeof(channel_settings)*preset,buffer,sizeof(channel_settings));
+	Serial.printf("EEPROM Read: %02x %02x %02x %02x %02x %02x %02x %02x\r\n",buffer[0],buffer[1],buffer[2],buffer[3],buffer[4],buffer[5],buffer[6],buffer[7]);
+#endif
+	
+	if(preset!=0)
+		Serial.printf("Stored frequency of %03.3f MHz to Preset %c\r\n",current.frequency,'A'+preset-1);
 }
+
+// 0 is the defaults, 1, 2 and 3 correspond to saved presets
 
 void ReadStoredFrequencyPreset(int preset)
 {
-	float freqval;
-
-	char buffer[4];
+	channel_settings temp;
 	
-	buffer[0]=EEPROM.read(EEPROM_PRESET_ADDRESS+4*preset+0);
-	buffer[1]=EEPROM.read(EEPROM_PRESET_ADDRESS+4*preset+1);
-	buffer[2]=EEPROM.read(EEPROM_PRESET_ADDRESS+4*preset+2);
-	buffer[3]=EEPROM.read(EEPROM_PRESET_ADDRESS+4*preset+3);
+	temp.frequency=EEPROM.readFloat(EEPROM_ADDRESS+sizeof(channel_settings)*preset+0);
+	temp.power_level=EEPROM.readByte(EEPROM_ADDRESS+sizeof(channel_settings)*preset+4);
+	temp.tx_period=EEPROM.readByte(EEPROM_ADDRESS+sizeof(channel_settings)*preset+5);
+	temp.use_extended_life_mode=EEPROM.readByte(EEPROM_ADDRESS+sizeof(channel_settings)*preset+6);
+	temp.frequency_band=EEPROM.readByte(EEPROM_ADDRESS+sizeof(channel_settings)*preset+7);
 	
-	#if 1
-		Serial.println(buffer[0],HEX);
-		Serial.println(buffer[1],HEX);
-		Serial.println(buffer[2],HEX);
-		Serial.println(buffer[3],HEX);
-	#endif
+#if 1
+	char buffer[8];
+	EEPROM.readBytes(EEPROM_ADDRESS+sizeof(channel_settings)*preset,buffer,sizeof(channel_settings));
+	Serial.printf("EEPROM Read: %02x %02x %02x %02x %02x %02x %02x %02x\r\n",buffer[0],buffer[1],buffer[2],buffer[3],buffer[4],buffer[5],buffer[6],buffer[7]);
+#endif
 	
-	memcpy((uint8_t *)&freqval,buffer,4);
-	
-	if(isnan(freqval))
+	if(		isnan(temp.frequency)
+		||	(temp.frequency<MIN_FREQUENCY4)
+		||	((temp.frequency>MAX_FREQUENCY4)&&(temp.frequency<MIN_FREQUENCY8))
+		||	((temp.frequency>MAX_FREQUENCY8)&&(temp.frequency<MIN_FREQUENCY9))
+		||	(temp.frequency>MAX_FREQUENCY9)
+		||	(temp.power_level<MIN_POWER_LEVEL)
+		||	(temp.power_level>MAX_POWER_LEVEL)
+		||	(temp.tx_period<MIN_CADENCE)
+		||	(temp.tx_period>MAX_CADENCE)
+		||	((temp.frequency_band!=4)&&(temp.frequency_band!=8)&&(temp.frequency_band!=9))	)
 	{
-		Serial.println("Stored frequency is invalid, subsituting the default");
-		frequency=DEFAULT_FREQUENCY4;
-		min_frequency=MIN_FREQUENCY4;
-		max_frequency=MAX_FREQUENCY4;
-		Serial.println();
+		Serial.println("Invalid stored settings detected, subsituting the defaults");
+		set_default_values();
 	}
 	else
 	{
-		frequency=freqval;
-		Serial.printf("Recalled frequency of %03.3f MHz to Preset %c\r\n",frequency,'A'+preset);
+		memcpy((void *)&current,(void *)&temp,sizeof(channel_settings));
+		
+		if(preset!=0)
+			Serial.printf("Recalled frequency of %03.3f MHz from Preset %c\r\n",current.frequency,'A'+preset-1);
 	}
 	
-	if(frequency<800.000)		{	min_frequency=MIN_FREQUENCY4;	max_frequency=MAX_FREQUENCY4;	default_frequency=DEFAULT_FREQUENCY4;	}
-	else if(frequency<900.000)	{	min_frequency=MIN_FREQUENCY8;	max_frequency=MAX_FREQUENCY8;	default_frequency=DEFAULT_FREQUENCY8;	}
-	else						{	min_frequency=MIN_FREQUENCY9;	max_frequency=MAX_FREQUENCY9;	default_frequency=DEFAULT_FREQUENCY9;	}
-	
+	set_frequency_band_edges();
+}
+
+void set_default_values(void)
+{
+	current.frequency=DEFAULT_FREQUENCY4;
+	current.power_level=DEFAULT_POWER_LEVEL;
+	current.tx_period=DEFAULT_CADENCE;
+	current.use_extended_life_mode=DEFAULT_EXTENDED_LIFE_MODE;
+	current.frequency_band=FREQUENCY_BAND_4;
+}
+
+void set_frequency_band_edges(void)
+{
+	if(current.frequency_band==4)		{	min_frequency=MIN_FREQUENCY4;	max_frequency=MAX_FREQUENCY4;	default_frequency=DEFAULT_FREQUENCY4;	}
+	else if(current.frequency_band==8)	{	min_frequency=MIN_FREQUENCY8;	max_frequency=MAX_FREQUENCY8;	default_frequency=DEFAULT_FREQUENCY8;	}
+	else if(current.frequency_band==9)	{	min_frequency=MIN_FREQUENCY9;	max_frequency=MAX_FREQUENCY9;	default_frequency=DEFAULT_FREQUENCY9;	}
+	else
+	{
+		Serial.print("Corrupt setting detected, resetting to defaults\r\n");
+		set_default_values();
+	}
 }
 

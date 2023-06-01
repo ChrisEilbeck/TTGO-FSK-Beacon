@@ -5,7 +5,7 @@
 #include <SPIFFS.h>
 
 const byte DNS_PORT=53;
-IPAddress apIP(8,8,4,4); // The default android DNS
+IPAddress apIP(8,8,8,8); // The default android DNS
 DNSServer dnsServer;
 
 AsyncWebServer server(80);
