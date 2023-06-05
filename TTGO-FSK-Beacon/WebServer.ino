@@ -10,12 +10,13 @@ DNSServer dnsServer;
 
 AsyncWebServer server(80);
 
+const char *apname="TTGO-FSK-BEACON";
 const char *password="marsflightcrew";
 
 void SetupWebServer(void)
 { 
 	WiFi.mode(WIFI_AP);
-	WiFi.softAP("TTGO-FSK-BEACON",password);
+	WiFi.softAP(apname,password);
 	WiFi.softAPConfig(apIP,apIP,IPAddress(255,255,255,0));
 	
 	// if DNSServer is started with "*" for domain name, it will reply with

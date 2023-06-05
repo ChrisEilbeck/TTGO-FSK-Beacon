@@ -22,7 +22,7 @@
 #define MAX_POWER_LEVEL				17
 
 #define MIN_CADENCE					20
-#define DEFAULT_CADENCE				20
+#define DEFAULT_CADENCE				30
 #define MAX_CADENCE					60
 
 #define FINE_STEP					0.001

@@ -19,6 +19,8 @@
 #recallA,#recallB,#recallC,#storeA,#storeB,#storeC
 {
 	width: 100%;
+	border-radius: 10px;
+	pady: 50px;
 }
 
 

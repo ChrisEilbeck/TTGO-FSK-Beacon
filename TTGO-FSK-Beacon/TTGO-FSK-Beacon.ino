@@ -9,6 +9,8 @@
  * Integrate the web config interface
  */
 
+extern IPAddress apIP;
+
 #ifdef ARDUINO_TBeam
 	#include <axp20x.h>
 	AXP20X_Class axp;
@@ -18,6 +20,8 @@
 	// eeprom is not supported by the chip on the Adafruit Feather M0
 	#include <EEPROM.h>
 #endif
+
+#include <esp_task_wdt.h>
 
 #include <RadioLib.h>
 #include <Adafruit_GFX.h>
@@ -129,7 +133,12 @@ void displaymenu(void)
 {
 	Serial.print("\nTTGO-FSK-BEACON\r\n===============\r\n\n");
 	Serial.print("Command menu\r\n------------\r\n\n");
+#if 0
 	Serial.print("\tt\t-\tTransmit a burst\r\n");
+#else
+	Serial.print("\tt\t-\tGo into normal operating mode\r\n");
+	Serial.print("\tT\t-\tStay in config mode with transmitter turned off\r\n");
+#endif
 	Serial.print("\t0\t-\tRestore default frequency\r\n");
 	Serial.print("\t+/u/U\t-\tIncrease frequency in fine, coarse or very coarse steps\r\n");
 	Serial.print("\t-/d/D\t-\tDecrease frequency in fine, coarse or very coarse steps\r\n");
@@ -144,8 +153,12 @@ void displaymenu(void)
 	Serial.print("\tA|B|C\t-\tStore frequency settings preset\r\n");
 	Serial.print("\tv\t-\tDisplay the battery voltage\r\n");
 	Serial.print("\tl/L\t-\tGreen LED on/off\r\n");
+#if 0
 	Serial.print("\tr\t-\tEnter run mode\r\n");
+#endif
+	Serial.print("\tX\t-\tReset to default settings\r\n");
 	Serial.print("\tm\t-\tRe-display this menu\r\n");
+	Serial.print("\t.\t-\tTurn the display back on for 30 seconds\r\n");
 	Serial.println();
 }
 
@@ -183,17 +196,16 @@ int SetupPMIC(void)
 
 void setup(void)
 {
+#if 0
+	esp_task_wdt_init(30,false);
+#endif
+	
 	Wire.begin();
 	SPI.begin();
 	
 	SetupPMIC();
 	
 	Serial.begin(115200);
-	
-#if 1
-	if(Serial)
-		configmode=true;
-#endif
 	
 #ifndef ARDUINO_TBeam
 	pinMode(LED_BUILTIN,OUTPUT);
@@ -219,9 +231,11 @@ void setup(void)
 	display.setCursor(40,24);	display.print("FSK");
 	display.setCursor(18,40);	display.print("BEACON");
 	display.display();
+
+#if 0
 	delay(2000);
+#endif
 	
-	// initialize SX1278 FSK modem with default settings
 	Serial.print("Radio initializing ... ");
 	
 	int state=radio.beginFSK();
@@ -301,8 +315,10 @@ void setup(void)
 	
 	displaymenu();
 	
+#if SUPPORT_WEBSERVER
 	SetupSPIFFS();
 	SetupWebServer();
+#endif
 }
 
 void loop(void)
@@ -316,119 +332,162 @@ void loop(void)
 		delay(200);
 	}
 #endif
-	
+#if SUPPORT_WEBSERVER
 	PollWebServer();
+#endif
 	
-	if(displayon)
+	PollDisplay();
+	PollConfigMode();
+	PollScheduler();
+	CheckUserButton();
+	
+	if(current.use_extended_life_mode)
 	{
-		static int display_last_update=0;
-		
-		if(millis()>(display_last_update+DISPLAY_UPDATE_PERIOD))
+		if(millis()>15*1000*60)
 		{
-			float batvolt=readbatteryvoltage();
+			// after 15 minutes of operation, switch power to 
+			// maximum and reduce cadence to one transmission 
+			// every 5 seconds			
+			radio.setOutputPower(MAX_POWER_LEVEL);
+			current.tx_period=100;	// 100 periods of 50ms
+		}
+	}
+	
+	if(!displayon)
+	{
+		// sleep for 10ms
+		esp_sleep_enable_timer_wakeup(10000);
+		esp_light_sleep_start();
+	}
+	
+#if 0
+	esp_task_wdt_reset();
+#endif
+}
+
+void PollDisplay(void)
+{
+	if(millis()>2000)
+	{
+		if(displayon)
+		{
+			static int display_last_update=0;
+			
+			if(millis()>(display_last_update+DISPLAY_UPDATE_PERIOD))
+			{
+				float batvolt=readbatteryvoltage();
+				
+				display.clearDisplay();
+				display.setTextColor(WHITE);
+				
+				display.setTextSize(1);		display.setCursor(16,0);	display.print("Battery Voltage");
+				display.setTextSize(2);		display.setCursor(24,12);	display.printf("%4.0fmV",batvolt);
+				display.setTextSize(1);		display.setCursor(38,28);	display.print("Frequency");
+				display.setTextSize(2);		display.setCursor(16,40);	display.printf("%3.3fM",current.frequency);
+				
+#if SUPPORT_WEBSERVER
+				display.setTextSize(1);		display.setCursor(16,56);	display.print("http://");	display.print(apIP);	display.print("/");
+#endif
+				
+				display.display(); 		
+			
+				display_last_update=millis();
+			}
+		}
+		else
+		{
+			// turn the display off and everything else other than the radio that we can
 			
 			display.clearDisplay();
-			display.setTextColor(WHITE);
-			
-			display.setTextSize(1);		display.setCursor(16,0);	display.print("Battery Voltage");
-			display.setTextSize(2);		display.setCursor(24,12);	display.printf("%4.0fmV",batvolt);
-			display.setTextSize(1);		display.setCursor(38,36);	display.print("Frequency");
-			display.setTextSize(2);		display.setCursor(16,48);	display.printf("%3.3fM",current.frequency);
-			
-			display.display(); 		
-		
-			display_last_update=millis();
+			display.display();
 		}
 		
-		if(!configmode)
-			if(millis()>displayonuntil)
-				displayon=false;
-	}
-	else
-	{
-		// turn the display off and everything else other than the radio that we can
-		
-		display.clearDisplay();
-		display.display();
-	}
-	
-	if(configmode)
-		do_config_mode();
-	else
-	{
-		static int lasttx=0;
-		
-		if(millis()>(lasttx+current.tx_period*MS_PER_TICK))
+		if(		!configmode
+			&&	displayon
+			&&	(millis()>displayonuntil)	)
 		{
-			uint8_t TxPacket[256];
-			int state;
-			
-			lasttx=millis();
-			
-			int cnt;
-			int burstcount=2;
-			
-			for(cnt=0;cnt<burstcount;cnt++)
-			{
-				memset(TxPacket,0xaa,32);
-				setledon();
-				state=radio.transmit(TxPacket,32);
-				setledoff();
-				
-				if(state==RADIOLIB_ERR_NONE)
-				{
-#if 0
-					Serial.println("[SX1278] Packet transmitted successfully!");
-#endif
-				}
-				else if(state==RADIOLIB_ERR_PACKET_TOO_LONG)	{	Serial.println("Radio packet too long!");					}
-				else if(state==RADIOLIB_ERR_TX_TIMEOUT)			{	Serial.println("Radio timed out while transmitting!");		}
-				else											{	Serial.println("Radio failed to transmit packet, code ");
-																	Serial.println(state);										}
-				
-				if(cnt!=(burstcount-1))
-					delay(100);
-			}
-		}
-		
-		if(current.use_extended_life_mode)
-		{
-			if(millis()>15*1000*60)
-			{
-				// after 15 minutes of operation, switch power to 
-				// maximum and reduce cadence to one transmission 
-				// every 5 seconds
-				
-				radio.setOutputPower(MAX_POWER_LEVEL);
-				current.tx_period=100;	// 100 periods of 50ms
-			}
-		}
-		
-		if(USER_BUTTON>=0)
-		{
-			static int last_user_button=0;
-			int user_button=digitalRead(USER_BUTTON);
-			
-			if(user_button&&!last_user_button)
-			{
-				Serial.print("Button pressed\r\n");
-				displayonuntil=millis()+30000;
-				displayon=true;
-			}
-			
-			last_user_button=user_button;
-		}
-		
-		if(!displayon)
-		{
-			// sleep for 50ms
-			esp_sleep_enable_timer_wakeup(50000);
-			esp_light_sleep_start();
+			Serial.print("Turning the display off and entering low power mode\r\n");
+			displayon=false;
 		}
 	}
 }
 
-void do_config_mode(void)
+int numbursts=5;
+int lasttx=5000;
+int nexttx=0;
+
+void PollScheduler(void)
+{
+	if(millis()>(lasttx+current.tx_period*MS_PER_TICK))
+	{
+		if(current.tx_period<100)	numbursts=2;
+		else						numbursts=1;
+		
+		nexttx=millis();
+		lasttx=millis();
+	}
+	
+	if(numbursts>0)
+	{
+		if(millis()>nexttx)
+		{
+			TransmitFSKBurst();
+			numbursts--;
+			nexttx=millis()+200;	// next burst in 200ms from now
+		}
+	}
+}
+
+void TransmitFSKBurst(void)
+{
+#if 0
+	setledon();
+	Serial.print("TX ");
+	setledoff();
+#else
+	if(!configmode)
+	{
+		uint8_t TxPacket[32];
+		int state;
+				
+		memset(TxPacket,0xaa,32);
+		setledon();
+		state=radio.transmit(TxPacket,32);
+		setledoff();
+	
+		if(state==RADIOLIB_ERR_NONE)
+		{
+#if 0
+			Serial.println("[SX1278] Packet transmitted successfully!");
+#endif
+		}
+		else if(state==RADIOLIB_ERR_PACKET_TOO_LONG)	{	Serial.println("Radio packet too long!");					}
+		else if(state==RADIOLIB_ERR_TX_TIMEOUT)			{	Serial.println("Radio timed out while transmitting!");		}
+		else											{	Serial.println("Radio failed to transmit packet, code ");
+															Serial.println(state);										}
+	}
+#endif
+}
+
+void CheckUserButton(void)
+{
+	if(USER_BUTTON>=0)
+	{
+		static int last_user_button=0;
+		int user_button=digitalRead(USER_BUTTON);
+		
+		if(user_button&&!last_user_button)
+		{
+			Serial.print("Button pressed\r\n");
+			displayonuntil=millis()+30000;
+			displayon=true;
+		}
+		
+		last_user_button=user_button;
+	}	
+}
+
+void PollConfigMode(void)
 {
 	int state;
 	
@@ -458,6 +517,7 @@ void do_config_mode(void)
 		
 		switch(byte)
 		{
+#if 0
 			case 't':
 			case 'T':	{
 							uint8_t TxPacket[256];
@@ -479,8 +539,18 @@ void do_config_mode(void)
 						}
 						
 						break;
+#else
+			case 't':	Serial.print("Entering normal operating mode\r\n");
+						configmode=false;
+						displayon=true;
+						displayonuntil=millis()+30000;
+						break;
 			
-#ifndef ADAFRUIT_FEATHER_M0
+			case 'T':	Serial.print("Entering config mode and disabling the transmitter\r\n");
+						configmode=true;
+						break;
+#endif
+						
 			// frequency adjustment commands
 			
 			case '0':	current.frequency=default_frequency;
@@ -519,7 +589,6 @@ void do_config_mode(void)
 						if(current.frequency<min_frequency)	current.frequency=min_frequency;
 						update_frequency(current.frequency);
 						break;
-#endif
 			
 			case '4':	Serial.println("Selecting operation in the 433MHz band");
 						current.frequency=DEFAULT_FREQUENCY4;
@@ -583,10 +652,17 @@ void do_config_mode(void)
 			
 			case 'L':	setledoff();
 						break;
-			
+
+#if 0			
 			case 'r':
 			case 'R':	configmode=false;
 						Serial.println("Entering run mode");
+						displayon=true;
+						displayonuntil=millis()+30000;
+						break;
+#endif
+
+			case '.':	Serial.print("Turning the display on for 30s\r\n");
 						displayon=true;
 						displayonuntil=millis()+30000;
 						break;
@@ -620,6 +696,12 @@ void do_config_mode(void)
 						}
 						
 						break;
+			
+			case 'X':	Serial.print("Resetting to default settings\r\n");
+						set_default_values();
+						set_frequency_band_edges();
+						SaveStoredFrequencyPreset(0);	
+						break;
 						
 			default:	// do nowt
 						break;
@@ -639,7 +721,7 @@ void SaveStoredFrequencyPreset(int preset)
 	
 	EEPROM.commit();
 	
-#if 1
+#if 0
 	char buffer[8];
 	EEPROM.readBytes(EEPROM_ADDRESS+sizeof(channel_settings)*preset,buffer,sizeof(channel_settings));
 	Serial.printf("EEPROM Read: %02x %02x %02x %02x %02x %02x %02x %02x\r\n",buffer[0],buffer[1],buffer[2],buffer[3],buffer[4],buffer[5],buffer[6],buffer[7]);
@@ -661,7 +743,7 @@ void ReadStoredFrequencyPreset(int preset)
 	temp.use_extended_life_mode=EEPROM.readByte(EEPROM_ADDRESS+sizeof(channel_settings)*preset+6);
 	temp.frequency_band=EEPROM.readByte(EEPROM_ADDRESS+sizeof(channel_settings)*preset+7);
 	
-#if 1
+#if 0
 	char buffer[8];
 	EEPROM.readBytes(EEPROM_ADDRESS+sizeof(channel_settings)*preset,buffer,sizeof(channel_settings));
 	Serial.printf("EEPROM Read: %02x %02x %02x %02x %02x %02x %02x %02x\r\n",buffer[0],buffer[1],buffer[2],buffer[3],buffer[4],buffer[5],buffer[6],buffer[7]);
@@ -690,6 +772,7 @@ void ReadStoredFrequencyPreset(int preset)
 	}
 	
 	set_frequency_band_edges();
+	SaveStoredFrequencyPreset(0);	
 }
 
 void set_default_values(void)
