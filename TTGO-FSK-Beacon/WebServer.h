@@ -1,6 +1,7 @@
 
 #pragma once
 
-int SetupWebServer(void);
+int StartWebServer(void);
+void StopWebServer(void);
 void PollWebServer(void);
 

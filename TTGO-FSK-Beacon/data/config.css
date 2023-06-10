@@ -11,16 +11,15 @@
 
 #updatefrequency
 {
-	width: 75%;
+	width: 60%;
 	font-size: 24px;
-	pady: 20px;
+	border-radius: 10px;
 }
 
 #recallA,#recallB,#recallC,#storeA,#storeB,#storeC
 {
 	width: 100%;
 	border-radius: 10px;
-	pady: 50px;
 }
 
 

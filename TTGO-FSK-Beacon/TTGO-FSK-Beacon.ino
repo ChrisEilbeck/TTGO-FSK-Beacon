@@ -9,20 +9,6 @@
  * Integrate the web config interface
  */
 
-extern IPAddress apIP;
-
-#ifdef ARDUINO_TBeam
-	#include <axp20x.h>
-	AXP20X_Class axp;
-#endif
-
-#ifndef ADAFRUIT_FEATHER_M0
-	// eeprom is not supported by the chip on the Adafruit Feather M0
-	#include <EEPROM.h>
-#endif
-
-#include <esp_task_wdt.h>
-
 #include <RadioLib.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -33,11 +19,24 @@ extern IPAddress apIP;
 #include "HardwareAbstractionLayer.h"
 #include "TTGO-FSK-Beacon.h"
 	
+#ifdef ARDUINO_TBeam
+	#include <axp20x.h>
+	AXP20X_Class axp;
+#endif
+
+#ifndef ADAFRUIT_FEATHER_M0
+	// eeprom is not supported by the chip on the Adafruit Feather M0
+	#include <EEPROM.h>
+#endif
+
+#if SUPPORT_WEBSERVER
+	extern IPAddress apIP;
+#endif
+
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-
 // Reset pin # (or -1 if sharing Arduino reset pin)
 #define OLED_RESET     -1 
 Adafruit_SSD1306 display(SCREEN_WIDTH,SCREEN_HEIGHT,&Wire,OLED_RESET);
@@ -50,29 +49,19 @@ channel_settings current;
 
 // extended life mode flags
 
-bool extended_life_mode_active=false;
+//bool extended_life_mode_active=false;
 
 // set up some defaults in case we can't read the programmed values from the eeprom
 
-//int frequency_band=4;
-//float frequency=DEFAULT_FREQUENCY4;
-
 int old_frequency_band=4;
 float old_frequency=DEFAULT_FREQUENCY4;
-
 float min_frequency=MIN_FREQUENCY4;
 float default_frequency=DEFAULT_FREQUENCY4;
 float max_frequency=MAX_FREQUENCY4;
 
-// time between transmissions
-
-//int txperiod=2000;
-
-//int power_level=DEFAULT_POWER_LEVEL;
+bool configmode=false;
 
 int display_starttime=0;
-
-bool configmode=false;
 bool displayon=true;
 int displayonuntil=30000;	// on for 30s from boot
 
@@ -97,9 +86,11 @@ void setledoff(void)
 float readbatteryvoltage(void)
 {
 #ifdef ARDUINO_TBeam
+//	Serial.print("Reading from PMIC\r\n");
 	float batvolt=axp.getBattVoltage();
 	return(batvolt);
 #else
+//	Serial.print("Reading analogue pin\r\n");
 	int adcvalue=analogRead(BATTERY_VOLTAGE_PIN);
 	return(BATTERY_CAL_VALUE*(float)adcvalue);
 #endif
@@ -164,7 +155,6 @@ void displaymenu(void)
 
 int SetupPMIC(void)
 {
-#ifdef ARDUINO_TBeam
 	Serial.print("Initialising the AXP192: ");
 	if(!axp.begin(Wire, AXP192_SLAVE_ADDRESS))	{	Serial.println(" PASS\r\n");				} 
 	else                                        {	Serial.println(" FAIL\r\n");	return(1);	}
@@ -189,25 +179,20 @@ int SetupPMIC(void)
 	else						{	Serial.print("Charging is disabled\r\n\n");	}
 	
 	axp.adc1Enable(AXP202_BATT_CUR_ADC1,true);
-#endif
 	
 	return(0);
 }
 
 void setup(void)
 {
-#if 0
-	esp_task_wdt_init(30,false);
-#endif
-	
 	Wire.begin();
 	SPI.begin();
 	
-	SetupPMIC();
-	
 	Serial.begin(115200);
 	
-#ifndef ARDUINO_TBeam
+#ifdef ARDUINO_TBeam
+  SetupPMIC();
+#else
 	pinMode(LED_BUILTIN,OUTPUT);
 	
 	if(USER_BUTTON>=0)
@@ -317,7 +302,7 @@ void setup(void)
 	
 #if SUPPORT_WEBSERVER
 	SetupSPIFFS();
-	SetupWebServer();
+	StartWebServer();
 #endif
 }
 
@@ -359,10 +344,6 @@ void loop(void)
 		esp_sleep_enable_timer_wakeup(10000);
 		esp_light_sleep_start();
 	}
-	
-#if 0
-	esp_task_wdt_reset();
-#endif
 }
 
 void PollDisplay(void)
@@ -408,6 +389,10 @@ void PollDisplay(void)
 		{
 			Serial.print("Turning the display off and entering low power mode\r\n");
 			displayon=false;
+			
+#if SUPPORT_WEBSERVER
+			StopWebServer();
+#endif
 		}
 	}
 }
@@ -795,4 +780,3 @@ void set_frequency_band_edges(void)
 		set_default_values();
 	}
 }
-
