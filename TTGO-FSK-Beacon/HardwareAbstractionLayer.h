@@ -5,8 +5,8 @@
 
 #ifdef ARDUINO_TBEAM_USE_RADIO_SX1276
 	#define BATTERY_VOLTAGE_PIN		-1
-	#define BATTERY_CAL_VALUE		1.734
-	#define USER_BUTTON				-1
+	#define BATTERY_CAL_VALUE		1
+	#define USER_BUTTON				38
 	#define LORA_D1					-1
 	#define ARDUINO_TBeam			1
 	#define SUPPORT_WEBSERVER 		0

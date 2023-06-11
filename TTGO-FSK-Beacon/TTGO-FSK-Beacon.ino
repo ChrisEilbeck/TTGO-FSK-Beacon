@@ -191,13 +191,13 @@ void setup(void)
 	Serial.begin(115200);
 	
 #ifdef ARDUINO_TBeam
-  SetupPMIC();
+	SetupPMIC();
 #else
 	pinMode(LED_BUILTIN,OUTPUT);
+#endif
 	
 	if(USER_BUTTON>=0)
-		pinMode(USER_BUTTON,INPUT_PULLUP);
-#endif
+		pinMode(USER_BUTTON,INPUT);
 	
 	setledoff();
 	
@@ -458,7 +458,7 @@ void CheckUserButton(void)
 {
 	if(USER_BUTTON>=0)
 	{
-		static int last_user_button=0;
+		static int last_user_button=1;
 		int user_button=digitalRead(USER_BUTTON);
 		
 		if(user_button&&!last_user_button)
