@@ -1,0 +1,74 @@
+<html>
+<head>
+	<link rel="stylesheet" href="config.css">
+	<script src="config.js"></script>
+</head>
+<body>
+	<center>
+		<h1>TTGO FSK Beacon</h1>
+		<h2><center>Configuration</center></h2>
+		
+		<label for "frequencyband">Frequency Band:</label>
+		<select name="frequencyband" id="frequencyband">
+			<option value="400">430-440 MHz</option>
+			<option value="800">868-870 MHz</option>
+			<option value="900">902-930 MHz</option>
+		</select>
+		
+		<br><br>
+		
+		<!-- table for frequency entry -->
+		<table class="frequencytable">
+			<tr>
+				<td></td>
+				<td><button id="mhz10up">&uArr;</button>
+				<td><button id="mhz1up">&uArr;</button>
+				<td></td>
+				<td><button id="khz100up">&uArr;</button>
+				<td><button id="khz10up">&uArr;</button>
+				<td><button id="khz1up">&uArr;</button>
+				<td></td>
+			</tr>
+			<tr>
+				<td><center>4</center></td>
+				<td><center>3</center></td>
+				<td><center>3</center></td>
+				<td><center>.</center></td>
+				<td><center>9</center></td>
+				<td><center>2</center></td>
+				<td><center>0</center></td>
+				<td><center>MHz</center></td>
+			</tr>
+			<tr>
+				<td></td>
+				<td><button id="mhz10down">&dArr;</button>
+				<td><button id="mhz1down">&dArr;</button>
+				<td></td>
+				<td><button id="khz100down">&dArr;</button>
+				<td><button id="khz10down">&dArr;</button>
+				<td><button id="khz1down">&dArr;</button>
+				<td></td>
+			</tr>
+		</table>
+		
+		<br>
+		<button id="updatefrequency">Store Settings</button>
+		<br>
+		<h2>Presets</h2>
+		
+		<!-- table for preset save and recall button -->
+		<table class="presettable">
+			<tr>
+				<td><center><button id="recallA"><br>Recall A<br><br></button></center></td>
+				<td><center><button id="recallB"><br>Recall B<br><br></button></center></td>
+				<td><center><button id="recallC"><br>Recall C<br><br></button></center></td>
+			</tr>
+			<tr>
+				<td><center><button id="storeA"><br>Store A<br><br></button></center></td>
+				<td><center><button id="storeB"><br>Store B<br><br></button></center></td>
+				<td><center><button id="storeC"><br>Store C<br><br></button></center></td>
+			</tr>
+		</table>
+	</center>
+</body>
+</html>

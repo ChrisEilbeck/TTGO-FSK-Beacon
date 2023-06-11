@@ -68,8 +68,9 @@ static const unsigned char PROGMEM logo_bmp[] =
 	#define LoRa_DIO0	26
 	#define LoRa_RESET	4
 	#define LoRa_DIO1	-1
+#endif
 
-/*
+ 
 //DCB
 //these need enabling if Lilygo T95_v1.1 version is being  used (the one that needs the uploader tool T-U2T)
   #define LILYGO_T95_V1_0
@@ -77,10 +78,9 @@ static const unsigned char PROGMEM logo_bmp[] =
   #define LoRa_MISO_PIN              19
   #define LoRa_MOSI_PIN              23
   #define I2C_SDA                    21
-  #define I2C_SCL                    22 */
-
+  #define I2C_SCL                    22 
   
-#endif
+
 #ifdef ADAFRUIT_FEATHER_M0
 	#define LoRa_NSS	8
 	#define LoRa_DIO0	3
@@ -208,8 +208,10 @@ int SetupPMIC(void)
 void setup(void)
 
 {
- //DCB needed for T95 Startup
- #if defined  LILYGO_T95_V1_0
+
+ //DCB needed for T95 Startup use board TTGo Lora32 v1
+#if defined  LILYGO_T95_V1_0
+
  SPI.begin(LoRa_SCLK_PIN, LoRa_MISO_PIN, LoRa_MOSI_PIN);
  Wire.begin(I2C_SDA, I2C_SCL);
  #endif
