@@ -73,12 +73,12 @@ static const unsigned char PROGMEM logo_bmp[] =
  
 //DCB
 //these need enabling if Lilygo T95_v1.1 version is being  used (the one that needs the uploader tool T-U2T)
-  #define LILYGO_T95_V1_0
-  #define LoRa_SCLK_PIN              18
-  #define LoRa_MISO_PIN              19
-  #define LoRa_MOSI_PIN              23
-  #define I2C_SDA                    21
-  #define I2C_SCL                    22 
+ // #define LILYGO_T95_V1_0
+ // #define LoRa_SCLK_PIN              18
+ // #define LoRa_MISO_PIN              19
+//  #define LoRa_MOSI_PIN              23
+//  #define I2C_SDA                    21
+//  #define I2C_SCL                    22 
   
 
 #ifdef ADAFRUIT_FEATHER_M0
