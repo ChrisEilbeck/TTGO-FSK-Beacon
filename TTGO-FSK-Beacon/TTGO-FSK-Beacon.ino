@@ -3,6 +3,7 @@
 #define SLEEP_MODE_OPERATION	1
 
 #ifdef ARDUINO_TBeam
+	#pragma message "Building for TTGO T-Beam"
 	#include <axp20x.h>
 	AXP20X_Class axp;
 #endif
@@ -50,20 +51,36 @@ static const unsigned char PROGMEM logo_bmp[] =
 #define DISPLAYUPDATEPERIOD	250
 
 // pin assignments for various boards we support
+	#define LoRa_NSS	18
+	#define LoRa_DIO0	26
+	#define LoRa_RESET	23
+	#define LoRa_DIO1	-1
 
 #ifdef ARDUINO_TBeam
+
+	#pragma message "Building for TTGO T-Beam"
 	#define LoRa_NSS	18
 	#define LoRa_DIO0	26
 	#define LoRa_RESET	14
 	#define LoRa_DIO1	-1
 #endif
+
+#ifdef ARDUINO_LILYGO_T_DISPLAY
+	#pragma message "Building for TTGO T-Beam 1.1"
+	#define LoRa_NSS	18
+	#define LoRa_DIO0  26
+	#define LoRa_RESET	23
+	#define LoRa_DIO1	-1
+#endif
 #ifdef ARDUINO_TTGO_LoRa32_v21new
+#pragma message "Building for TTGO lora32v21"
 	#define LoRa_NSS	18
 	#define LoRa_DIO0	26
 	#define LoRa_RESET	23
 	#define LoRa_DIO1	-1
 #endif
 #ifdef ARDUINO_TTGO_LoRa32_V1
+#pragma message "Building for TTGO LORa32v1"
 	#define LoRa_NSS	5
 	#define LoRa_DIO0	26
 	#define LoRa_RESET	4
